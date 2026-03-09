@@ -15,8 +15,9 @@ nrd_export(.data, path)
 The output \code{path}, invisibly.
 }
 \description{
-\code{nrd_export()} forces execution of a lazy NRD pipeline and writes the result
-to a compressed parquet file.
+\code{nrd_export()} writes a processed NRD pipeline to a compressed parquet file.
+For lazy DuckDB tables, the write is executed directly by DuckDB to preserve
+out-of-core behavior.
 }
 \examples{
 \donttest{

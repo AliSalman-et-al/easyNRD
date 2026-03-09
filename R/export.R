@@ -1,7 +1,8 @@
 #' Materialize and Export an NRD Pipeline
 #'
-#' `nrd_export()` forces execution of a lazy NRD pipeline and writes the result
-#' to a compressed parquet file.
+#' `nrd_export()` writes a processed NRD pipeline to a compressed parquet file.
+#' For lazy DuckDB tables, the write is executed directly by DuckDB to preserve
+#' out-of-core behavior.
 #'
 #' @param .data A lazy or in-memory table produced by the easyNRD pipeline.
 #' @param path Output parquet file path.
@@ -27,12 +28,30 @@ nrd_export <- function(.data, path) {
     dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
   }
 
-  out <- if (inherits(.data, "tbl_lazy") || inherits(.data, "arrow_dplyr_query")) {
-    dplyr::collect(.data)
-  } else {
-    .data
+  if (inherits(.data, "tbl_lazy") || inherits(.data, "arrow_dplyr_query")) {
+    con <- tryCatch(dbplyr::remote_con(.data), error = function(e) NULL)
+
+    if (!inherits(con, "duckdb_connection")) {
+      rlang::abort(
+        paste(
+          "`nrd_export()` requires a DuckDB-backed lazy table for out-of-core export.",
+          "Use `nrd_ingest()` to initialize the pipeline backend."
+        )
+      )
+    }
+
+    query_sql <- as.character(dbplyr::sql_render(.data))
+    out_path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+    out_path_sql <- as.character(DBI::dbQuoteString(con, out_path))
+    copy_sql <- paste0(
+      "COPY (", query_sql, ") TO ", out_path_sql,
+      " (FORMAT PARQUET, COMPRESSION ZSTD)"
+    )
+
+    DBI::dbExecute(con, copy_sql)
+    return(invisible(path))
   }
 
-  arrow::write_parquet(out, sink = path, compression = "zstd")
+  arrow::write_parquet(.data, sink = path, compression = "zstd")
   invisible(path)
 }

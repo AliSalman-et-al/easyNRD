@@ -88,7 +88,44 @@ nrd_window_order <- function(.data, ...) {
   names(tidyselect::eval_select(vars_quo, data = .data))
 }
 
-.nrd_should_sum_var <- function(.data, var) {
+.nrd_double_map <- function(.data, vars) {
+  vars <- unique(intersect(vars, colnames(.data)))
+  if (length(vars) == 0) {
+    return(stats::setNames(logical(0), character(0)))
+  }
+
+  out <- stats::setNames(rep(NA, length(vars)), vars)
+
+  if (inherits(.data, "tbl_lazy") || inherits(.data, "arrow_dplyr_query")) {
+    schema <- tryCatch(
+      {
+        .data |>
+          dplyr::select(dplyr::all_of(vars)) |>
+          dplyr::slice_head(n = 0) |>
+          dplyr::collect()
+      },
+      error = function(e) NULL
+    )
+
+    if (is.null(schema)) {
+      return(out)
+    }
+
+    for (v in intersect(vars, names(schema))) {
+      out[[v]] <- is.double(schema[[v]])
+    }
+
+    return(out)
+  }
+
+  for (v in vars) {
+    out[[v]] <- is.double(.data[[v]])
+  }
+
+  out
+}
+
+.nrd_should_sum_var <- function(.data, var, double_map = NULL) {
   if (grepl("(CHG|COST|PAY|LOS|DAY)", var, ignore.case = TRUE)) {
     return(TRUE)
   }
@@ -96,6 +133,10 @@ nrd_window_order <- function(.data, ...) {
   default_sum_vars <- c("Episode_TOTCHG", "TOTCHG")
   if (var %in% default_sum_vars) {
     return(TRUE)
+  }
+
+  if (!is.null(double_map) && var %in% names(double_map) && !is.na(double_map[[var]])) {
+    return(isTRUE(double_map[[var]]))
   }
 
   if (!inherits(.data, "tbl_lazy") && var %in% colnames(.data)) {

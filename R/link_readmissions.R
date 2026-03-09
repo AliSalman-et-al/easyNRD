@@ -57,6 +57,7 @@ nrd_link_readmissions <- function(
     .nrd_add_year_end_censoring()
 
   readmit_names <- .nrd_resolve_readmit_vars(base, {{ readmit_vars }})
+  readmit_double_map <- .nrd_double_map(base, readmit_names)
 
   index_pool <- base |>
     dplyr::filter(
@@ -113,7 +114,7 @@ nrd_link_readmissions <- function(
   for (v in readmit_names) {
     cand_sym <- rlang::sym(v)
     out_nm <- paste0("readmit_", v)
-    if (.nrd_should_sum_var(base, v)) {
+    if (.nrd_should_sum_var(base, v, double_map = readmit_double_map)) {
       summarise_exprs[[out_nm]] <- rlang::expr(sum(!!cand_sym, na.rm = TRUE))
     } else {
       summarise_exprs[[out_nm]] <- rlang::expr(max(!!cand_sym, na.rm = TRUE))
