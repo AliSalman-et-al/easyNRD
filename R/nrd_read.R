@@ -164,9 +164,11 @@ nrd_read <- function(
 
   .nrd_assert_cols(tbl, .nrd_read_required_cols)
 
-  row_level <- tbl |>
+  base_augmented_tbl <- tbl |>
     nrd_augment_labels() |>
-    nrd_extract_codes() |>
+    nrd_extract_codes()
+
+  row_level <- base_augmented_tbl |>
     dplyr::group_by(YEAR, NRD_VISITLINK) |>
     nrd_window_order(NRD_DAYSTOEVENT, KEY_NRD) |>
     dplyr::mutate(
@@ -215,12 +217,27 @@ nrd_read <- function(
       Episode_DMONTH = max(Episode_DMONTH, na.rm = TRUE),
       Episode_Admission_Day = min(.nrd_admit_day, na.rm = TRUE),
       Episode_LOS = sum(.nrd_los, na.rm = TRUE),
-      Episode_DX10 = paste(DX10_Combined, collapse = ", "),
-      Episode_PR10 = paste(PR10_Combined, collapse = ", "),
+      Episode_TOTCHG = sum(as.numeric(TOTCHG), na.rm = TRUE),
+      Episode_DX10 = stringr::str_flatten(DX10_Combined, collapse = ", "),
+      Episode_PR10 = stringr::str_flatten(PR10_Combined, collapse = ", "),
       Episode_DX10_Principal = max(.nrd_dx1_first, na.rm = TRUE),
       DIED = max(DIED, na.rm = TRUE),
       Episode_N_Stays = dplyr::n(),
       .groups = "drop"
     ) |>
-    dplyr::mutate(Episode_Discharge_Day = Episode_Admission_Day + Episode_LOS)
+    dplyr::mutate(Episode_Discharge_Day = Episode_Admission_Day + Episode_LOS) |>
+    dplyr::left_join(
+      base_augmented_tbl |>
+        dplyr::select(
+          -dplyr::any_of(c(
+            "DIED", "LOS", "TOTCHG", "DMONTH", "NRD_DAYSTOEVENT",
+            "DISPUNIFORM", "SAMEDAYEVENT", "NRD_VISITLINK"
+          )),
+          -dplyr::starts_with("I10_DX"),
+          -dplyr::starts_with("I10_PR"),
+          -dplyr::starts_with("DX10_"),
+          -dplyr::starts_with("PR10_")
+        ),
+      by = c("YEAR", "Episode_Index_KEY_NRD" = "KEY_NRD")
+    )
 }
