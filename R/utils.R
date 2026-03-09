@@ -7,6 +7,41 @@
   }
 }
 
+.nrd_is_lazy_table <- function(.data) {
+  inherits(.data, "tbl_lazy") || inherits(.data, "arrow_dplyr_query")
+}
+
+.nrd_is_duckdb_lazy <- function(.data) {
+  if (!.nrd_is_lazy_table(.data)) {
+    return(FALSE)
+  }
+
+  con <- tryCatch(dbplyr::remote_con(.data), error = function(e) NULL)
+  inherits(con, "duckdb_connection")
+}
+
+.nrd_assert_lazy_duckdb <- function(.data, arg = "data") {
+  if (!.nrd_is_lazy_table(.data)) {
+    rlang::abort(
+      paste0(
+        "`", arg, "` must be a lazy DuckDB table. ",
+        "Use `nrd_ingest()` to initialize an out-of-core pipeline."
+      )
+    )
+  }
+
+  if (!.nrd_is_duckdb_lazy(.data)) {
+    rlang::abort(
+      paste0(
+        "`", arg, "` must use a DuckDB backend. ",
+        "Use `nrd_ingest()` to initialize an out-of-core pipeline."
+      )
+    )
+  }
+
+  invisible(.data)
+}
+
 .nrd_standardize_names <- function(.data) {
   rename_map <- c(
     "NRD_VisitLink" = "NRD_VISITLINK",

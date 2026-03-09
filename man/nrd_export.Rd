@@ -7,7 +7,7 @@
 nrd_export(.data, path)
 }
 \arguments{
-\item{.data}{A lazy or in-memory table produced by the easyNRD pipeline.}
+\item{.data}{A DuckDB-backed lazy table produced by the easyNRD pipeline.}
 
 \item{path}{Output parquet file path.}
 }

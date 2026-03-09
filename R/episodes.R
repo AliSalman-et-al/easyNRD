@@ -26,6 +26,7 @@ nrd_build_episodes <- function(
   transfer_disp_codes = 2L,
   transfer_sameday_codes = c(1L, 4L)
 ) {
+  .nrd_assert_lazy_duckdb(data, arg = "data")
   data <- .nrd_standardize_names(data)
 
   .nrd_assert_cols(

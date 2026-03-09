@@ -36,6 +36,7 @@ nrd_link_readmissions <- function(
   window = 30L,
   readmit_vars = NULL
 ) {
+  .nrd_assert_lazy_duckdb(data, arg = "data")
   data <- .nrd_standardize_names(data)
 
   .nrd_assert_cols(

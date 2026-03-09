@@ -8,7 +8,7 @@ nrd_ingest(datasets)
 }
 \arguments{
 \item{datasets}{Character vector of parquet file paths, an Arrow dataset,
-or an existing lazy table.}
+an Arrow query, or an existing DuckDB-backed lazy table.}
 }
 \value{
 A lazy table, typically \code{tbl_dbi} backed by DuckDB.
