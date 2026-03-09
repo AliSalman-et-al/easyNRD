@@ -1,11 +1,29 @@
 Package: easyNRD
-Title: What the Package Does (One Line, Title Case)
+Title: Tidy Tools for HCUP Nationwide Readmissions Database Workflows
 Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+Authors@R:
+    person("Ali", "Salman", email = "alisalman.et.al@gmail.com", role = c("aut", "cre"))
+Description: Provides composable, lazy-evaluation friendly tools for cleaning,
+    episode consolidation, and readmission linkage in Healthcare Cost and
+    Utilization Project Nationwide Readmissions Database (HCUP-NRD) data.
+    Functions are designed for Arrow and DuckDB backends to support large,
+    out-of-core analytic pipelines and denominator-preserving survival methods,
+    including competing-risk frameworks.
+License: file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.2.0)
+Imports:
+    arrow,
+    dbplyr,
+    dplyr,
+    duckdb,
+    rlang,
+    stringr,
+    tibble,
+    tidyselect
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

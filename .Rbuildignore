@@ -1,2 +1,5 @@
 ^easyNRD\.Rproj$
 ^\.Rproj\.user$
+^data-raw$
+^mcp$
+^LICENSE\.md$
