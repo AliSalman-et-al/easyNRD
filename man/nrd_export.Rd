@@ -4,12 +4,16 @@
 \alias{nrd_export}
 \title{Materialize and Export an NRD Pipeline}
 \usage{
-nrd_export(.data, path)
+nrd_export(.data, path, row_group_size = 250000L)
 }
 \arguments{
 \item{.data}{A DuckDB-backed lazy table produced by the easyNRD pipeline.}
 
 \item{path}{Output parquet file path.}
+
+\item{row_group_size}{Target parquet row-group size used during DuckDB
+materialization. Smaller groups reduce peak memory pressure for wide NRD
+extracts. Defaults to \code{250000L}.}
 }
 \value{
 The output \code{path}, invisibly.
@@ -24,7 +28,7 @@ out-of-core behavior.
 if (FALSE) {
   nrd_ingest("/path/to/nrd.parquet") |>
     nrd_build_episodes() |>
-    nrd_export("/path/to/episodes.parquet")
+    nrd_export("/path/to/episodes.parquet", row_group_size = 250000L)
 }
 }
 }

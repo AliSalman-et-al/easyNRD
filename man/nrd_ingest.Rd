@@ -4,11 +4,18 @@
 \alias{nrd_ingest}
 \title{Ingest NRD Parquet Files Lazily}
 \usage{
-nrd_ingest(datasets)
+nrd_ingest(datasets, temp_directory = NULL, memory_limit = NULL)
 }
 \arguments{
 \item{datasets}{Character vector of parquet file paths, an Arrow dataset,
 an Arrow query, or an existing DuckDB-backed lazy table.}
+
+\item{temp_directory}{Optional DuckDB spill directory used for temporary
+on-disk operations. Provide a single path string (for example, a fast local
+SSD directory) to reduce RAM pressure during large window operations.}
+
+\item{memory_limit}{Optional DuckDB memory limit as a single string, such as
+\code{"8GB"}.}
 }
 \value{
 A lazy table, typically \code{tbl_dbi} backed by DuckDB.
@@ -18,10 +25,23 @@ A lazy table, typically \code{tbl_dbi} backed by DuckDB.
 The function standardizes common HCUP name variants and keeps data out-of-core
 for downstream pipeline steps.
 }
+\section{Hardware Optimizations}{
+
+For best performance and stability on constrained hardware, pre-process raw
+parquet files so they are partitioned by \code{YEAR} and sorted by
+\code{NRD_VISITLINK} then \code{NRD_DAYSTOEVENT}. This layout helps DuckDB leverage
+parquet row-group min/max statistics to skip irrelevant blocks and minimize
+expensive external sorting.
+}
+
 \examples{
 \donttest{
 if (FALSE) {
-  raw_nrd <- nrd_ingest(c("/path/to/NRD_2019_CORE.parquet", "/path/to/NRD_2020_CORE.parquet"))
+  raw_nrd <- nrd_ingest(
+    c("/path/to/NRD_2019_CORE.parquet", "/path/to/NRD_2020_CORE.parquet"),
+    temp_directory = "/fast_scratch/duckdb_tmp",
+    memory_limit = "8GB"
+  )
 }
 }
 }
