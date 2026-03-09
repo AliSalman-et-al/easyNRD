@@ -9,6 +9,14 @@
 Provides lazy, SQL-translatable tools for NRD label augmentation, episode
 consolidation, and readmission linkage.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/AliSalman-et-al/easyNRD}
+  \item Report bugs at \url{https://github.com/AliSalman-et-al/easyNRD/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Ali Salman \email{alisalman.et.al@gmail.com}
 
