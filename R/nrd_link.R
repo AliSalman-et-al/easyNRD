@@ -21,10 +21,10 @@
 }
 
 .nrd_resolve_readmit_vars <- function(.data, readmit_vars) {
-  if (is.null(readmit_vars)) {
+  vars_quo <- rlang::enquo(readmit_vars)
+  if (rlang::quo_is_null(vars_quo)) {
     return(character(0))
   }
-  vars_quo <- rlang::enquo(readmit_vars)
   names(tidyselect::eval_select(vars_quo, data = .data))
 }
 
