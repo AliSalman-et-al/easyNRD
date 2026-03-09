@@ -2,7 +2,7 @@
 % Please edit documentation in R/nrd_link.R
 \name{nrd_link}
 \alias{nrd_link}
-\title{Link First Readmissions and Survival Outcomes}
+\title{Deprecated: Use \code{nrd_link_readmissions()}}
 \usage{
 nrd_link(
   .data,
@@ -13,56 +13,22 @@ nrd_link(
 )
 }
 \arguments{
-\item{.data}{Episode-level table, typically from \code{\link[=nrd_read]{nrd_read()}}.}
+\item{.data}{Episode-level lazy table from \code{nrd_build_episodes()}.}
 
-\item{index_condition}{Data-masked expression for index episodes.}
+\item{index_condition}{Unquoted logical expression that defines index events.}
 
-\item{readmit_condition}{Data-masked expression for readmission candidates.}
+\item{readmit_condition}{Unquoted logical expression that defines qualifying
+readmission events.}
 
 \item{window}{Integer readmission window in days. Defaults to \code{30L}.}
 
-\item{readmit_vars}{Tidyselect-style expression of candidate columns to append
-as wide \verb{readmit_*} fields.}
+\item{readmit_vars}{Optional tidyselect specification for columns to pull from
+the linked readmission and append as wide \verb{readmit_*} columns.}
 }
 \value{
-Full denominator-preserving lazy table with outcome columns and
-optional \verb{readmit_*} columns.
+A denominator-preserving lazy table with readmission outcomes.
 }
 \description{
-\code{nrd_link()} adds denominator-preserving outcome variables to an episode-level
-NRD table and optionally appends wide readmission attributes from the first
-linked readmission episode.
-}
-\details{
-This function preserves the complete episode denominator and does not drop
-rows. It evaluates \code{index_condition} to create \code{IndexEvent}, computes
-\code{Days_to_End_of_Year} using the HCUP-compatible month midpoint approximation,
-and links index discharge to candidate admissions within the same
-\code{YEAR} + \code{NRD_VISITLINK} trajectory.
-
-First qualifying readmissions are selected within \code{window} days and used to
-generate:
-\itemize{
-\item \code{time_to_event}
-\item \code{outcome_status} (\code{"Died at Index"}, \code{"Readmitted"}, \code{"Censored"})
-}
-
-\code{outcome_status} is returned as character for lazy backend safety.
-
-If \code{readmit_vars} are provided, tied minimum-gap readmissions are aggregated
-and joined back to index rows as \verb{readmit_*} columns.
-}
-\examples{
-\donttest{
-if (FALSE) {
-  linked <- nrd_read("/path/to/nrd/parquet") |>
-    dplyr::mutate(target_index = Episode_DX10_Principal == "A419") |>
-    nrd_link(
-      index_condition = target_index,
-      readmit_condition = DIED == 0L,
-      window = 30L,
-      readmit_vars = c(Episode_TOTCHG, DIED)
-    )
-}
-}
+\code{nrd_link()} is retained for backward compatibility and forwards directly to
+\code{nrd_link_readmissions()}.
 }

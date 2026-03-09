@@ -2,7 +2,7 @@
 % Please edit documentation in R/nrd_read.R
 \name{nrd_read}
 \alias{nrd_read}
-\title{Read and Assemble NRD Episodes Lazily}
+\title{Deprecated: Use \code{nrd_ingest()} + \code{nrd_build_episodes()}}
 \usage{
 nrd_read(
   datasets,
@@ -11,42 +11,16 @@ nrd_read(
 )
 }
 \arguments{
-\item{datasets}{A parquet path, Arrow dataset, or lazy table.}
+\item{datasets}{Character vector of parquet file paths.}
 
-\item{transfer_disp_codes}{Integer vector of transfer-out \code{DISPUNIFORM} codes.
-Defaults to \code{2L}.}
+\item{transfer_disp_codes}{Integer \code{DISPUNIFORM} transfer codes.}
 
-\item{transfer_sameday_codes}{Integer vector of \code{SAMEDAYEVENT} continuity
-codes. Defaults to \code{c(1L, 4L)}.}
+\item{transfer_sameday_codes}{Integer \code{SAMEDAYEVENT} continuity codes.}
 }
 \value{
 A lazy episode-level table.
 }
 \description{
-\code{nrd_read()} is the unified ingestion entrypoint for HCUP-NRD. It reads
-parquet input lazily, augments administrative labels through relational
-lookups, constructs diagnosis/procedure row strings, and deterministically
-consolidates transfer-linked rows into episode-level records.
-}
-\details{
-The Nationwide Readmissions Database is hospitalization-level. Transfer chains
-can span multiple rows but represent one clinical episode. \code{nrd_read()} uses a
-strict temporal frame (\code{NRD_DAYSTOEVENT}, \code{KEY_NRD}) within
-\code{YEAR} + \code{NRD_VISITLINK}, builds transfer continuity using \code{DISPUNIFORM} and
-\code{SAMEDAYEVENT}, and collapses each chain to one episode row.
-
-Episode-level diagnosis and procedure arrays are aggregated across the
-transfer chain as \code{Episode_DX10} and \code{Episode_PR10}. The principal diagnosis
-of the unified episode (\code{Episode_DX10_Principal}) is taken from the first row
-in sequence (\code{I10_DX1}).
-
-This function never filters the denominator and is designed for survey-aware,
-lazy pipelines.
-}
-\examples{
-\donttest{
-if (FALSE) {
-  episodes <- nrd_read("/path/to/nrd/parquet")
-}
-}
+\code{nrd_read()} is retained for backward compatibility and forwards to the new
+pipeline API.
 }

@@ -6,8 +6,8 @@
 \alias{easyNRD-package}
 \title{easyNRD: Tools for HCUP-NRD Workflows}
 \description{
-Provides lazy, SQL-translatable tools for NRD label augmentation, episode
-consolidation, and readmission linkage.
+Provides lazy, SQL-translatable tools for NRD ingestion, episode
+consolidation, readmission linkage, export, and survey design preparation.
 }
 \seealso{
 Useful links:
