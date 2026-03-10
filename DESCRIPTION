@@ -3,12 +3,14 @@ Title: Tidy Tools for HCUP Nationwide Readmissions Database Workflows
 Version: 0.0.0.9000
 Authors@R:
     person("Ali", "Salman", email = "alisalman.et.al@gmail.com", role = c("aut", "cre"))
-Description: Provides composable, lazy-evaluation friendly tools for cleaning,
-    episode consolidation, and readmission linkage in Healthcare Cost and
+Description: A tidy, out-of-core framework for Healthcare Cost and
     Utilization Project Nationwide Readmissions Database (HCUP-NRD) data.
-    Functions are designed for Arrow and DuckDB backends to support large,
-    out-of-core analytic pipelines and denominator-preserving survival methods,
-    including competing-risk frameworks.
+    Built on 'arrow' and 'duckdb', 'easyNRD' provides a composable pipeline to
+    ingest raw files, consolidate transfer-linked hospitalizations into
+    clinical episodes, and link index events to first qualifying readmissions.
+    The workflow preserves denominator integrity and supports statistically
+    robust survival and competing-risk analyses without exhausting system
+    memory.
 License: file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

@@ -14,7 +14,7 @@
 #'   selected coded columns. If `TRUE`, keep the original coded columns and
 #'   append labeled columns with the `_label` suffix.
 #'
-#' @return A modified object of the same backend class as `.data`.
+#' @returns A modified object of the same backend class as `.data`.
 #' @export
 #'
 #' @examples

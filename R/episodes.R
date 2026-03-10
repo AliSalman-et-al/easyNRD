@@ -1,17 +1,23 @@
-#' Build Transfer-Consolidated NRD Episodes
+#' Consolidate NRD Discharges into Clinical Episodes
 #'
 #' `nrd_build_episodes()` deterministically consolidates transfer-linked and
 #' same-day hospital records into one clinical episode per trajectory segment.
 #' The result remains lazy so users can continue phenotyping with
 #' `dplyr::mutate()` before modeling.
 #'
-#' @param data A lazy NRD table from `nrd_ingest()`.
+#' @param .data A lazy NRD table from [nrd_ingest()].
 #' @param transfer_disp_codes Integer `DISPUNIFORM` codes that indicate
 #'   transfer out. Defaults to `2L`.
 #' @param transfer_sameday_codes Integer `SAMEDAYEVENT` codes that indicate
 #'   same-day continuity. Defaults to `c(1L, 2L, 4L)`.
 #'
-#' @return A lazy episode-level table.
+#' @returns A lazy episode-level table.
+#' @details
+#' Step 2 of the core `easyNRD` pipeline. This function consolidates transfer-
+#' linked and same-day contiguous discharges into episode-level records so
+#' downstream phenotype and readmission logic operate on clinically coherent
+#' units.
+#' @family pipeline functions
 #' @export
 #'
 #' @examples
@@ -22,22 +28,22 @@
 #' }
 #' }
 nrd_build_episodes <- function(
-  data,
+  .data,
   transfer_disp_codes = 2L,
   transfer_sameday_codes = c(1L, 2L, 4L)
 ) {
-  .nrd_assert_lazy_duckdb(data, arg = "data")
-  data <- .nrd_standardize_names(data)
+  .nrd_assert_lazy_duckdb(.data, arg = ".data")
+  .data <- .nrd_standardize_names(.data)
 
   .nrd_assert_cols(
-    data,
+    .data,
     c(
       "YEAR", "NRD_VISITLINK", "KEY_NRD", "NRD_DAYSTOEVENT", "LOS",
       "DISPUNIFORM", "SAMEDAYEVENT", "DMONTH", "DIED", "I10_DX1"
     )
   )
 
-  base_tbl <- data |>
+  base_tbl <- .data |>
     .nrd_extract_codes()
 
   row_level <- base_tbl |>

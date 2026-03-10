@@ -2,16 +2,16 @@
 % Please edit documentation in R/episodes.R
 \name{nrd_build_episodes}
 \alias{nrd_build_episodes}
-\title{Build Transfer-Consolidated NRD Episodes}
+\title{Consolidate NRD Discharges into Clinical Episodes}
 \usage{
 nrd_build_episodes(
-  data,
+  .data,
   transfer_disp_codes = 2L,
   transfer_sameday_codes = c(1L, 2L, 4L)
 )
 }
 \arguments{
-\item{data}{A lazy NRD table from \code{nrd_ingest()}.}
+\item{.data}{A lazy NRD table from \code{\link[=nrd_ingest]{nrd_ingest()}}.}
 
 \item{transfer_disp_codes}{Integer \code{DISPUNIFORM} codes that indicate
 transfer out. Defaults to \code{2L}.}
@@ -28,6 +28,12 @@ same-day hospital records into one clinical episode per trajectory segment.
 The result remains lazy so users can continue phenotyping with
 \code{dplyr::mutate()} before modeling.
 }
+\details{
+Step 2 of the core \code{easyNRD} pipeline. This function consolidates transfer-
+linked and same-day contiguous discharges into episode-level records so
+downstream phenotype and readmission logic operate on clinically coherent
+units.
+}
 \examples{
 \donttest{
 if (FALSE) {
@@ -36,3 +42,9 @@ if (FALSE) {
 }
 }
 }
+\seealso{
+Other pipeline functions: 
+\code{\link{nrd_ingest}()},
+\code{\link{nrd_link_readmissions}()}
+}
+\concept{pipeline functions}

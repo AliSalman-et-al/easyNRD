@@ -19,7 +19,8 @@
 #' parquet row-group min/max statistics to skip irrelevant blocks and minimize
 #' expensive external sorting.
 #'
-#' @return A lazy table, typically `tbl_dbi` backed by DuckDB.
+#' @returns A lazy table, typically `tbl_dbi` backed by DuckDB.
+#' @family pipeline functions
 #' @export
 #'
 #' @examples

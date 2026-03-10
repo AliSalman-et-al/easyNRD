@@ -17,7 +17,7 @@
 #'   Supports unquoted column names and selection helpers, including character
 #'   vectors returned by `nrd_demographics()` and `nrd_hospital_vars()`.
 #'
-#' @return A subsetted object of the same backend class as `.data`.
+#' @returns A subsetted object of the same backend class as `.data`.
 #' @export
 #'
 #' @examples
@@ -53,7 +53,7 @@ nrd_select <- function(.data, ...) {
 #' Use inside `nrd_select()`, `dplyr::select()`, or with
 #' `tidyselect::any_of()` when some variables may be absent.
 #'
-#' @return A character vector of demographic variable names.
+#' @returns A character vector of demographic variable names.
 #' @export
 #'
 #' @examples
@@ -68,7 +68,7 @@ nrd_demographics <- function() {
 #' Use inside `nrd_select()`, `dplyr::select()`, or with
 #' `tidyselect::any_of()` when some variables may be absent.
 #'
-#' @return A character vector of hospital structural variable names.
+#' @returns A character vector of hospital structural variable names.
 #' @export
 #'
 #' @examples

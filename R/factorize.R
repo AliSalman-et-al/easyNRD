@@ -5,9 +5,9 @@
 #' stable reference categories for downstream modeling workflows such as
 #' `survival` and `gtsummary`.
 #'
-#' @param data A local in-memory `data.frame`/tibble or `tbl_svy` object.
+#' @param .data A local in-memory `data.frame`/tibble or `tbl_svy` object.
 #'
-#' @return The input object with dictionary-backed columns converted to factors.
+#' @returns The input object with dictionary-backed columns converted to factors.
 #' @export
 #'
 #' @examples
@@ -18,27 +18,27 @@
 #' )
 #'
 #' nrd_factorize(dat)
-nrd_factorize <- function(data) {
-  out <- data
+nrd_factorize <- function(.data) {
+  out <- .data
 
-  if (inherits(data, "tbl_svy")) {
-    if (.nrd_is_lazy_table(data$variables)) {
+  if (inherits(.data, "tbl_svy")) {
+    if (.nrd_is_lazy_table(.data$variables)) {
       rlang::abort(
-        "`data` is a lazy survey object. Call `dplyr::collect()` before `nrd_factorize()`."
+        "`.data` is a lazy survey object. Call `dplyr::collect()` before `nrd_factorize()`."
       )
     }
 
-    available_cols <- names(data$variables)
-  } else if (is.data.frame(data)) {
-    if (.nrd_is_lazy_table(data)) {
+    available_cols <- names(.data$variables)
+  } else if (is.data.frame(.data)) {
+    if (.nrd_is_lazy_table(.data)) {
       rlang::abort(
-        "`data` is lazy. Call `dplyr::collect()` before `nrd_factorize()`."
+        "`.data` is lazy. Call `dplyr::collect()` before `nrd_factorize()`."
       )
     }
 
-    available_cols <- names(data)
+    available_cols <- names(.data)
   } else {
-    rlang::abort("`data` must be an in-memory data frame/tibble or `tbl_svy` object.")
+    rlang::abort("`.data` must be an in-memory data frame/tibble or `tbl_svy` object.")
   }
 
   mutations <- rlang::list2()
@@ -67,7 +67,7 @@ nrd_factorize <- function(data) {
   }
 
   if (length(mutations) == 0) {
-    return(data)
+    return(.data)
   }
 
   dplyr::mutate(out, !!!mutations)

@@ -5,7 +5,7 @@
 \title{Link Index Episodes to Readmissions}
 \usage{
 nrd_link_readmissions(
-  data,
+  .data,
   index_condition,
   readmit_condition,
   window = 30L,
@@ -14,7 +14,7 @@ nrd_link_readmissions(
 )
 }
 \arguments{
-\item{data}{Episode-level lazy table from \code{nrd_build_episodes()}.}
+\item{.data}{Episode-level lazy table from \code{\link[=nrd_build_episodes]{nrd_build_episodes()}}.}
 
 \item{index_condition}{Unquoted logical expression that defines index events.}
 
@@ -41,6 +41,12 @@ A denominator-preserving lazy table with readmission linkage,
 subsequent admission within a readmission window while preserving the complete
 denominator.
 }
+\details{
+Step 3 of the core \code{easyNRD} pipeline. Under \code{censor_method = "drop_month"},
+late-year discharges that cannot guarantee full follow-up are retained in the
+data but converted to \code{IndexEvent = 0L}, so they remain eligible as
+readmission candidates for earlier index episodes.
+}
 \examples{
 \donttest{
 if (FALSE) {
@@ -55,3 +61,9 @@ if (FALSE) {
 }
 }
 }
+\seealso{
+Other pipeline functions: 
+\code{\link{nrd_build_episodes}()},
+\code{\link{nrd_ingest}()}
+}
+\concept{pipeline functions}

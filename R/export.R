@@ -10,7 +10,7 @@
 #'   materialization. Smaller groups reduce peak memory pressure for wide NRD
 #'   extracts. Defaults to `250000L`.
 #'
-#' @return The output `path`, invisibly.
+#' @returns The output `path`, invisibly.
 #' @export
 #'
 #' @examples

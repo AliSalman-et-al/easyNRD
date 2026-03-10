@@ -45,3 +45,9 @@ if (FALSE) {
 }
 }
 }
+\seealso{
+Other pipeline functions: 
+\code{\link{nrd_build_episodes}()},
+\code{\link{nrd_link_readmissions}()}
+}
+\concept{pipeline functions}

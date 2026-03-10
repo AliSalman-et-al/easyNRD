@@ -6,7 +6,7 @@
 #' @param .data A data frame, lazy table, or a character path accepted by
 #'   [nrd_ingest()].
 #'
-#' @return A `srvyr::tbl_svy` object configured with NRD survey design variables.
+#' @returns A `srvyr::tbl_svy` object configured with NRD survey design variables.
 #' @details
 #' `nrd_as_survey()` supports a dual-track workflow:
 #'

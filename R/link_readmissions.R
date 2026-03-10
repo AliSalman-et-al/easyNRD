@@ -4,7 +4,7 @@
 #' subsequent admission within a readmission window while preserving the complete
 #' denominator.
 #'
-#' @param data Episode-level lazy table from `nrd_build_episodes()`.
+#' @param .data Episode-level lazy table from [nrd_build_episodes()].
 #' @param index_condition Unquoted logical expression that defines index events.
 #' @param readmit_condition Unquoted logical expression that defines qualifying
 #'   readmission events.
@@ -17,8 +17,14 @@
 #' @param readmit_vars Optional tidyselect specification for columns to pull from
 #'   the linked readmission and append as wide `readmit_*` columns.
 #'
-#' @return A denominator-preserving lazy table with readmission linkage,
+#' @returns A denominator-preserving lazy table with readmission linkage,
 #'   `time_to_event`, and `outcome_status`.
+#' @details
+#' Step 3 of the core `easyNRD` pipeline. Under `censor_method = "drop_month"`,
+#' late-year discharges that cannot guarantee full follow-up are retained in the
+#' data but converted to `IndexEvent = 0L`, so they remain eligible as
+#' readmission candidates for earlier index episodes.
+#' @family pipeline functions
 #' @export
 #'
 #' @examples
@@ -35,18 +41,18 @@
 #' }
 #' }
 nrd_link_readmissions <- function(
-  data,
+  .data,
   index_condition,
   readmit_condition,
   window = 30L,
   censor_method = c("drop_month", "mid_month"),
   readmit_vars = NULL
 ) {
-  .nrd_assert_lazy_duckdb(data, arg = "data")
-  data <- .nrd_standardize_names(data)
+  .nrd_assert_lazy_duckdb(.data, arg = ".data")
+  .data <- .nrd_standardize_names(.data)
 
   .nrd_assert_cols(
-    data,
+    .data,
     c(
       "YEAR", "NRD_VISITLINK", "Episode_ID", "Episode_KEY_NRD",
       "Episode_Admission_Day", "Episode_Discharge_Day", "Episode_DMONTH", "DIED"
@@ -60,7 +66,7 @@ nrd_link_readmissions <- function(
   idx_quo <- rlang::enquo(index_condition)
   readm_quo <- rlang::enquo(readmit_condition)
 
-  base <- data |>
+  base <- .data |>
     dplyr::mutate(IndexEvent = dplyr::if_else(!!idx_quo, 1L, 0L, missing = 0L)) |>
     .nrd_add_year_end_censoring(window = window, censor_method = censor_method) |>
     dplyr::mutate(
