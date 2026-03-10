@@ -24,7 +24,7 @@ A modified object of the same backend class as \code{.data}.
 \code{nrd_label()} translates standard HCUP integer-coded variables into
 human-readable character labels using dictionary mappings stored in
 \code{easyNRD} internals. For lazy database backends, translations are expressed
-with \code{dplyr::case_match()} so they push down to SQL \verb{CASE WHEN} operations
+with \code{dplyr::case_when()} so they push down to SQL \verb{CASE WHEN} operations
 and run out-of-core before materialization.
 }
 \examples{

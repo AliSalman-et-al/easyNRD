@@ -10,7 +10,7 @@ utils::globalVariables(
     "Days_to_End_of_Year_idx", "DIED_idx", "Episode_Discharge_Day_idx", "Episode_DX10_Principal", "Episode_ID",
     "Episode_ID_cand", "Episode_ID_idx", "Episode_Index_KEY_NRD", "Episode_KEY_NRD",
     "Episode_KEY_NRD_cand", "Episode_KEY_NRD_idx", "Episode_LOS", "I10_DX1",
-    "IndexEvent", "KEY_NRD", "LOS", "NRD_DAYSTOEVENT", "NRD_VISITLINK",
+    "DISCWT", "HOSP_NRD", "IndexEvent", "KEY_NRD", "LOS", "NRD_DAYSTOEVENT", "NRD_STRATUM", "NRD_VISITLINK",
     "PR10_Combined", "SAMEDAYEVENT", "TOTCHG", "YEAR", "first_readmit_gap", "label",
     "outcome_status", "time_to_event"
   )

@@ -66,3 +66,29 @@ test_that("nrd_label translates on lazy duckdb backend", {
   expect_no_error(dbplyr::sql_render(labeled))
   expect_match(dbplyr::sql_render(labeled), "CASE", ignore.case = TRUE)
 })
+
+test_that("nrd_label handles float coded values on lazy duckdb backend", {
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+
+  DBI::dbWriteTable(
+    con,
+    "label_mock_float",
+    tibble::tibble(
+      FEMALE = c(0.0, 1.0, 9.0),
+      PAY1 = c(1.0, 3.0, 8.0),
+      AGE = c(60, 70, 80)
+    )
+  )
+
+  lazy_tbl <- dplyr::tbl(con, "label_mock_float")
+
+  labeled <- nrd_label(lazy_tbl, FEMALE, PAY1)
+
+  expect_no_error(dbplyr::sql_render(labeled))
+
+  collected <- dplyr::collect(labeled)
+
+  expect_identical(collected$FEMALE, c("Male", "Female", "9"))
+  expect_identical(collected$PAY1, c("Medicare", "Private", "8"))
+})

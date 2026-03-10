@@ -3,7 +3,7 @@
 #' `nrd_label()` translates standard HCUP integer-coded variables into
 #' human-readable character labels using dictionary mappings stored in
 #' `easyNRD` internals. For lazy database backends, translations are expressed
-#' with `dplyr::case_match()` so they push down to SQL `CASE WHEN` operations
+#' with `dplyr::case_when()` so they push down to SQL `CASE WHEN` operations
 #' and run out-of-core before materialization.
 #'
 #' @param .data A data frame, lazy table, or Arrow query.
@@ -57,9 +57,9 @@ nrd_label <- function(.data, ..., .keep_original = FALSE) {
     dict <- nrd_dict[[col]]
     col_sym <- rlang::sym(col)
     match_exprs <- unname(lapply(seq_along(dict), function(i) {
-      key <- names(dict)[i]
+      key <- as.integer(names(dict)[i])
       val <- dict[[i]]
-      rlang::expr(!!key ~ !!val)
+      rlang::expr(as.integer(!!col_sym) == !!key ~ !!val)
     }))
 
     output_col <- if (.keep_original) {
@@ -70,10 +70,9 @@ nrd_label <- function(.data, ..., .keep_original = FALSE) {
 
     out <- dplyr::mutate(
       out,
-      !!output_col := dplyr::case_match(
-        as.character(!!col_sym),
+      !!output_col := dplyr::case_when(
         !!!match_exprs,
-        .default = as.character(!!col_sym)
+        TRUE ~ as.character(as.integer(!!col_sym))
       )
     )
   }
