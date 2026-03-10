@@ -2,25 +2,48 @@
 % Please edit documentation in R/survey.R
 \name{nrd_as_survey}
 \alias{nrd_as_survey}
-\title{Convert Materialized NRD Data to a Survey Design}
+\title{Instantiate a Lazy Complex Survey Design for the NRD}
 \usage{
-nrd_as_survey(dataset)
+nrd_as_survey(.data)
 }
 \arguments{
-\item{dataset}{File path to a parquet dataset produced by \code{nrd_export()}, or
-a data frame/tibble already in memory.}
+\item{.data}{A data frame, lazy table, or a character path accepted by
+\code{\link[=nrd_ingest]{nrd_ingest()}}.}
 }
 \value{
-A \code{survey::svydesign} object with NRD design variables.
+A \code{srvyr::tbl_svy} object configured with NRD survey design variables.
 }
 \description{
-\code{nrd_as_survey()} reads a materialized parquet dataset (or accepts an
-in-memory data frame) and returns an HCUP-ready complex survey design object.
+\code{nrd_as_survey()} wraps NRD data in an \code{srvyr} survey object so descriptive
+epidemiology can stay out-of-core on Arrow and DuckDB backends.
+}
+\details{
+\code{nrd_as_survey()} supports a dual-track workflow:
+\itemize{
+\item Track 1 (out-of-core descriptive epidemiology): compute weighted summaries
+directly on the database backend using \code{dplyr::group_by()} with \code{srvyr}
+verbs like \code{srvyr::survey_mean()} and \code{srvyr::survey_total()}.
+\item Track 2 (in-memory inferential modeling): for models such as
+\code{survey::svyglm()} or \code{survey::svycoxph()}, first call
+\code{dplyr::collect()} on the lazy survey object to bring the targeted subset
+into memory.
+}
 }
 \examples{
 \donttest{
 if (FALSE) {
-  des <- nrd_as_survey("/path/to/linked_output.parquet")
+  design_lazy <- nrd_ingest("/path/to/linked_output.parquet") |>
+    nrd_as_survey()
+
+  design_lazy |>
+    dplyr::group_by(outcome_status) |>
+    dplyr::summarise(readmit_rate = srvyr::survey_mean(IndexEvent == 1L))
+
+  model_data <- design_lazy |>
+    dplyr::filter(IndexEvent == 1L) |>
+    dplyr::collect()
+
+  survey::svyglm(IndexEvent ~ AGE + FEMALE, design = model_data)
 }
 }
 }
