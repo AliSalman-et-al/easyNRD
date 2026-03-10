@@ -1,108 +1,60 @@
-# Build internal NRD lookup tables as relational tibbles.
-
-lookup_sex <- tibble::tibble(
-  code = c(0L, 1L),
-  label = c("Male", "Female")
-)
-
-lookup_income_quartile <- tibble::tibble(
-  code = c(1L, 2L, 3L, 4L),
-  label = c(
-    "0-25th percentile",
-    "26th to 50th percentile",
-    "51st to 75th percentile",
-    "76th to 100th percentile"
+nrd_dict <- list(
+  FEMALE = c("0" = "Male", "1" = "Female"),
+  PAY1 = c(
+    "1" = "Medicare",
+    "2" = "Medicaid",
+    "3" = "Private",
+    "4" = "Self-pay",
+    "5" = "No charge",
+    "6" = "Other"
+  ),
+  ZIPINC_QRTL = c(
+    "1" = "0-25th percentile",
+    "2" = "26th to 50th percentile",
+    "3" = "51st to 75th percentile",
+    "4" = "76th to 100th percentile"
+  ),
+  PL_NCHS = c(
+    "1" = "Central metro >=1 million",
+    "2" = "Fringe metro >=1 million",
+    "3" = "Metro 250,000-999,999",
+    "4" = "Metro 50,000-249,999",
+    "5" = "Micropolitan",
+    "6" = "Other"
+  ),
+  H_CONTRL = c(
+    "1" = "Government, nonfederal",
+    "2" = "Private, not-profit",
+    "3" = "Private, invest-own"
+  ),
+  HOSP_BEDSIZE = c("1" = "Small", "2" = "Medium", "3" = "Large"),
+  HOSP_UR_TEACH = c(
+    "0" = "Metropolitan, non-teaching",
+    "1" = "Metropolitan, teaching",
+    "2" = "Non-metropolitan"
+  ),
+  HOSP_URCAT4 = c(
+    "1" = "Large metropolitan >=1 million",
+    "2" = "Small metropolitan <1 million",
+    "3" = "Micropolitan",
+    "4" = "Non-urban"
+  ),
+  DISPUNIFORM = c(
+    "1" = "Routine discharge to home/self-care",
+    "2" = "Transfer to another short-term hospital",
+    "5" = "Transfer to SNF/intermediate/other facility",
+    "6" = "Home health care",
+    "7" = "Left against medical advice",
+    "20" = "Died in hospital",
+    "99" = "Alive, destination unknown"
+  ),
+  SAMEDAYEVENT = c(
+    "0" = "No same-day event",
+    "1" = "Same-day event: 2 hospitals (transfer)",
+    "2" = "Same-day event: 2 hospitals (separate stays)",
+    "3" = "Same-day event: 2 discharges, same hospital",
+    "4" = "Same-day event: 3+ discharges"
   )
 )
 
-lookup_payer <- tibble::tibble(
-  code = c(1L, 2L, 3L, 4L, 5L, 6L),
-  label = c("Medicare", "Medicaid", "Private", "Self-pay", "No charge", "Other")
-)
-
-lookup_urbanicity <- tibble::tibble(
-  code = c(1L, 2L, 3L, 4L, 5L, 6L),
-  label = c(
-    "Central metro >=1 million",
-    "Fringe metro >=1 million",
-    "Metro 250,000-999,999",
-    "Metro 50,000-249,999",
-    "Micropolitan",
-    "Other"
-  )
-)
-
-lookup_h_contrl <- tibble::tibble(
-  code = c(1L, 2L, 3L),
-  label = c("Government, nonfederal", "Private, not-profit", "Private, invest-own")
-)
-
-lookup_hosp_bedsize <- tibble::tibble(
-  code = c(1L, 2L, 3L),
-  label = c("Small", "Medium", "Large")
-)
-
-lookup_hosp_ur_teach <- tibble::tibble(
-  code = c(0L, 1L, 2L),
-  label = c("Metropolitan, non-teaching", "Metropolitan, teaching", "Non-metropolitan")
-)
-
-lookup_hosp_urcat4 <- tibble::tibble(
-  code = c(1L, 2L, 3L, 4L),
-  label = c(
-    "Large metropolitan >=1 million",
-    "Small metropolitan <1 million",
-    "Micropolitan",
-    "Non-urban"
-  )
-)
-
-lookup_dispuniform <- tibble::tibble(
-  code = c(1L, 2L, 5L, 6L, 7L, 20L, 99L),
-  label = c(
-    "Routine discharge to home/self-care",
-    "Transfer to another short-term hospital",
-    "Transfer to SNF/intermediate/other facility",
-    "Home health care",
-    "Left against medical advice",
-    "Died in hospital",
-    "Alive, destination unknown"
-  )
-)
-
-lookup_samedayevent <- tibble::tibble(
-  code = c(0L, 1L, 2L, 3L, 4L),
-  label = c(
-    "No same-day event",
-    "Same-day event: 2 hospitals (transfer)",
-    "Same-day event: 2 hospitals (separate stays)",
-    "Same-day event: 2 discharges, same hospital",
-    "Same-day event: 3+ discharges"
-  )
-)
-
-nrd_lookup_sex <- lookup_sex
-nrd_lookup_income_quartile <- lookup_income_quartile
-nrd_lookup_payer <- lookup_payer
-nrd_lookup_urbanicity <- lookup_urbanicity
-nrd_lookup_h_contrl <- lookup_h_contrl
-nrd_lookup_hosp_bedsize <- lookup_hosp_bedsize
-nrd_lookup_hosp_ur_teach <- lookup_hosp_ur_teach
-nrd_lookup_hosp_urcat4 <- lookup_hosp_urcat4
-nrd_lookup_dispuniform <- lookup_dispuniform
-nrd_lookup_samedayevent <- lookup_samedayevent
-
-usethis::use_data(
-  nrd_lookup_sex,
-  nrd_lookup_income_quartile,
-  nrd_lookup_payer,
-  nrd_lookup_urbanicity,
-  nrd_lookup_h_contrl,
-  nrd_lookup_hosp_bedsize,
-  nrd_lookup_hosp_ur_teach,
-  nrd_lookup_hosp_urcat4,
-  nrd_lookup_dispuniform,
-  nrd_lookup_samedayevent,
-  internal = TRUE,
-  overwrite = TRUE
-)
+usethis::use_data(nrd_dict, internal = TRUE, overwrite = TRUE)
