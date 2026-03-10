@@ -54,3 +54,19 @@ test_that("nrd_factorize works with in-memory tbl_svy", {
   expect_true(is.factor(out$variables$FEMALE))
   expect_identical(levels(out$variables$FEMALE), unname(easyNRD:::nrd_dict$FEMALE))
 })
+
+test_that("nrd_factorize prioritizes _label columns from nrd_label keep_original", {
+  dat <- tibble::tibble(
+    FEMALE = c(0L, 1L, 0L),
+    PAY1 = c(1L, 3L, 6L),
+    AGE = c(50L, 63L, 77L)
+  )
+
+  labeled <- nrd_label(dat, FEMALE, .keep_original = TRUE)
+  out <- nrd_factorize(labeled)
+
+  expect_type(out$FEMALE, "integer")
+  expect_true(is.factor(out$FEMALE_label))
+  expect_identical(levels(out$FEMALE_label), unname(easyNRD:::nrd_dict$FEMALE))
+  expect_identical(as.character(out$FEMALE_label), c("Male", "Female", "Male"))
+})

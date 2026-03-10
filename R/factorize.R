@@ -19,6 +19,8 @@
 #'
 #' nrd_factorize(dat)
 nrd_factorize <- function(data) {
+  out <- data
+
   if (inherits(data, "tbl_svy")) {
     if (.nrd_is_lazy_table(data$variables)) {
       rlang::abort(
@@ -26,7 +28,7 @@ nrd_factorize <- function(data) {
       )
     }
 
-    dict_cols <- intersect(names(data$variables), names(nrd_dict))
+    available_cols <- names(data$variables)
   } else if (is.data.frame(data)) {
     if (.nrd_is_lazy_table(data)) {
       rlang::abort(
@@ -34,26 +36,39 @@ nrd_factorize <- function(data) {
       )
     }
 
-    dict_cols <- intersect(names(data), names(nrd_dict))
+    available_cols <- names(data)
   } else {
     rlang::abort("`data` must be an in-memory data frame/tibble or `tbl_svy` object.")
   }
 
-  if (length(dict_cols) == 0) {
-    return(data)
-  }
+  mutations <- rlang::list2()
 
-  out <- data
+  for (base_col in names(nrd_dict)) {
+    label_col <- paste0(base_col, "_label")
 
-  for (col in dict_cols) {
-    col_sym <- rlang::sym(col)
-    level_order <- unname(nrd_dict[[col]])
+    target_col <- if (label_col %in% available_cols) {
+      label_col
+    } else if (base_col %in% available_cols) {
+      base_col
+    } else {
+      NULL
+    }
 
-    out <- dplyr::mutate(
-      out,
-      !!col_sym := factor(as.character(!!col_sym), levels = level_order)
+    if (is.null(target_col)) {
+      next
+    }
+
+    col_sym <- rlang::sym(target_col)
+    level_order <- unname(nrd_dict[[base_col]])
+
+    mutations[[target_col]] <- rlang::expr(
+      factor(as.character(!!col_sym), levels = !!level_order)
     )
   }
 
-  out
+  if (length(mutations) == 0) {
+    return(data)
+  }
+
+  dplyr::mutate(out, !!!mutations)
 }

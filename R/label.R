@@ -51,7 +51,7 @@ nrd_label <- function(.data, ..., .keep_original = FALSE) {
     return(.data)
   }
 
-  out <- .data
+  mutations <- rlang::list2()
 
   for (col in selected_cols) {
     dict <- nrd_dict[[col]]
@@ -63,19 +63,18 @@ nrd_label <- function(.data, ..., .keep_original = FALSE) {
     }))
 
     output_col <- if (.keep_original) {
-      rlang::sym(paste0(col, "_label"))
+      paste0(col, "_label")
     } else {
-      col_sym
+      col
     }
 
-    out <- dplyr::mutate(
-      out,
-      !!output_col := dplyr::case_when(
+    mutations[[output_col]] <- rlang::expr(
+      dplyr::case_when(
         !!!match_exprs,
         TRUE ~ as.character(as.integer(!!col_sym))
       )
     )
   }
 
-  out
+  dplyr::mutate(.data, !!!mutations)
 }
