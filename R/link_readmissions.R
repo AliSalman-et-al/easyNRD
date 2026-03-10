@@ -9,6 +9,11 @@
 #' @param readmit_condition Unquoted logical expression that defines qualifying
 #'   readmission events.
 #' @param window Integer readmission window in days. Defaults to `30L`.
+#' @param censor_method Year-end censoring strategy. `"drop_month"` (default)
+#'   marks late-year discharges as non-index events to guarantee complete
+#'   follow-up for the selected window while preserving them as candidate
+#'   readmissions. `"mid_month"` uses a mid-month approximation for censoring
+#'   time.
 #' @param readmit_vars Optional tidyselect specification for columns to pull from
 #'   the linked readmission and append as wide `readmit_*` columns.
 #'
@@ -34,6 +39,7 @@ nrd_link_readmissions <- function(
   index_condition,
   readmit_condition,
   window = 30L,
+  censor_method = c("drop_month", "mid_month"),
   readmit_vars = NULL
 ) {
   .nrd_assert_lazy_duckdb(data, arg = "data")
@@ -49,13 +55,23 @@ nrd_link_readmissions <- function(
 
   stopifnot(is.numeric(window), length(window) == 1, window >= 1)
   window <- as.integer(window)
+  censor_method <- rlang::arg_match(censor_method)
 
   idx_quo <- rlang::enquo(index_condition)
   readm_quo <- rlang::enquo(readmit_condition)
 
   base <- data |>
     dplyr::mutate(IndexEvent = dplyr::if_else(!!idx_quo, 1L, 0L, missing = 0L)) |>
-    .nrd_add_year_end_censoring()
+    .nrd_add_year_end_censoring(window = window, censor_method = censor_method) |>
+    dplyr::mutate(
+      IndexEvent = dplyr::if_else(
+        censor_method == "drop_month" &
+          IndexEvent == 1L &
+          dplyr::coalesce(.nrd_followup_complete, FALSE) == FALSE,
+        0L,
+        IndexEvent
+      )
+    )
 
   readmit_names <- .nrd_resolve_readmit_vars(base, {{ readmit_vars }})
   readmit_double_map <- .nrd_double_map(base, readmit_names)
@@ -147,5 +163,5 @@ nrd_link_readmissions <- function(
         TRUE ~ "Censored"
       )
     ) |>
-    dplyr::select(-Episode_KEY_NRD_cand, -first_readmit_gap)
+    dplyr::select(-Episode_KEY_NRD_cand, -first_readmit_gap, -dplyr::any_of(".nrd_followup_complete"))
 }

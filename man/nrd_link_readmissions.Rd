@@ -9,6 +9,7 @@ nrd_link_readmissions(
   index_condition,
   readmit_condition,
   window = 30L,
+  censor_method = c("drop_month", "mid_month"),
   readmit_vars = NULL
 )
 }
@@ -21,6 +22,12 @@ nrd_link_readmissions(
 readmission events.}
 
 \item{window}{Integer readmission window in days. Defaults to \code{30L}.}
+
+\item{censor_method}{Year-end censoring strategy. \code{"drop_month"} (default)
+marks late-year discharges as non-index events to guarantee complete
+follow-up for the selected window while preserving them as candidate
+readmissions. \code{"mid_month"} uses a mid-month approximation for censoring
+time.}
 
 \item{readmit_vars}{Optional tidyselect specification for columns to pull from
 the linked readmission and append as wide \verb{readmit_*} columns.}

@@ -9,7 +9,7 @@
 #' @param transfer_disp_codes Integer `DISPUNIFORM` codes that indicate
 #'   transfer out. Defaults to `2L`.
 #' @param transfer_sameday_codes Integer `SAMEDAYEVENT` codes that indicate
-#'   same-day continuity. Defaults to `c(1L, 4L)`.
+#'   same-day continuity. Defaults to `c(1L, 2L, 4L)`.
 #'
 #' @return A lazy episode-level table.
 #' @export
@@ -24,7 +24,7 @@
 nrd_build_episodes <- function(
   data,
   transfer_disp_codes = 2L,
-  transfer_sameday_codes = c(1L, 4L)
+  transfer_sameday_codes = c(1L, 2L, 4L)
 ) {
   .nrd_assert_lazy_duckdb(data, arg = "data")
   data <- .nrd_standardize_names(data)

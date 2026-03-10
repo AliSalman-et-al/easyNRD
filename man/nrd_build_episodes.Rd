@@ -7,7 +7,7 @@
 nrd_build_episodes(
   data,
   transfer_disp_codes = 2L,
-  transfer_sameday_codes = c(1L, 4L)
+  transfer_sameday_codes = c(1L, 2L, 4L)
 )
 }
 \arguments{
@@ -17,7 +17,7 @@ nrd_build_episodes(
 transfer out. Defaults to \code{2L}.}
 
 \item{transfer_sameday_codes}{Integer \code{SAMEDAYEVENT} codes that indicate
-same-day continuity. Defaults to \code{c(1L, 4L)}.}
+same-day continuity. Defaults to \code{c(1L, 2L, 4L)}.}
 }
 \value{
 A lazy episode-level table.
