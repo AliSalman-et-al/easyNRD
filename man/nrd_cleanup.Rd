@@ -4,11 +4,13 @@
 \alias{nrd_cleanup}
 \title{Remove easyNRD Temporary Session Directories}
 \usage{
-nrd_cleanup(temp_directory = tempdir(), force = FALSE)
+nrd_cleanup(temp_directory = nrd_cache_dir(), force = FALSE)
 }
 \arguments{
 \item{temp_directory}{Base directory that contains \verb{easyNRD_*} subfolders.
-Defaults to \code{\link[base:tempfile]{base::tempdir()}}.}
+Defaults to \code{\link[=nrd_cache_dir]{nrd_cache_dir()}}, the persistent easyNRD package cache. This
+default helps detect and remove orphaned DuckDB files from previous crashed
+sessions.}
 
 \item{force}{Logical flag. If \code{FALSE} (default), remove only orphaned
 directories from inactive process IDs. If \code{TRUE}, remove all

@@ -6,7 +6,7 @@
 \usage{
 nrd_ingest(
   datasets,
-  temp_directory = tempdir(),
+  temp_directory = nrd_cache_dir(),
   memory_limit = NULL,
   threads = NULL,
   preserve_insertion_order = FALSE
@@ -17,10 +17,12 @@ nrd_ingest(
 an Arrow query, or an existing DuckDB-backed lazy table.}
 
 \item{temp_directory}{DuckDB spill directory used for temporary on-disk
-operations. Defaults to \code{\link[base:tempfile]{base::tempdir()}}. Provide a single path string
-(for example, a fast local SSD directory) to reduce RAM pressure during
-large window operations. \code{easyNRD} creates process-specific subdirectories
-and removes orphaned session caches automatically.}
+operations. Defaults to \code{\link[=nrd_cache_dir]{nrd_cache_dir()}}, a persistent package cache that
+supports larger-than-memory out-of-core processing. \code{easyNRD} creates
+process-specific subdirectories and removes orphaned session caches
+automatically. Override this location for HPC nodes or dedicated scratch
+storage by setting \code{EASYNRD_CACHE_DIR} or
+\code{options(easynrd.cache_dir = "/path/to/cache")}.}
 
 \item{memory_limit}{Optional DuckDB memory limit as a single string, such as
 \code{"8GB"}. When \code{NULL} (default), DuckDB uses its native memory management.

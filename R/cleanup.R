@@ -5,7 +5,9 @@
 #' to recover disk space, especially on shared institutional servers.
 #'
 #' @param temp_directory Base directory that contains `easyNRD_*` subfolders.
-#'   Defaults to [base::tempdir()].
+#'   Defaults to [nrd_cache_dir()], the persistent easyNRD package cache. This
+#'   default helps detect and remove orphaned DuckDB files from previous crashed
+#'   sessions.
 #' @param force Logical flag. If `FALSE` (default), remove only orphaned
 #'   directories from inactive process IDs. If `TRUE`, remove all
 #'   `easyNRD_*` directories in `temp_directory`.
@@ -21,7 +23,7 @@
 #'   nrd_cleanup(temp_directory = "/scratch/nrd_tmp", force = TRUE)
 #' }
 #' }
-nrd_cleanup <- function(temp_directory = tempdir(), force = FALSE) {
+nrd_cleanup <- function(temp_directory = nrd_cache_dir(), force = FALSE) {
   if (!is.character(temp_directory) ||
     length(temp_directory) != 1 ||
     is.na(temp_directory) ||

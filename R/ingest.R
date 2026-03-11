@@ -7,10 +7,12 @@
 #' @param datasets Character vector of parquet file paths, an Arrow dataset,
 #'   an Arrow query, or an existing DuckDB-backed lazy table.
 #' @param temp_directory DuckDB spill directory used for temporary on-disk
-#'   operations. Defaults to [base::tempdir()]. Provide a single path string
-#'   (for example, a fast local SSD directory) to reduce RAM pressure during
-#'   large window operations. `easyNRD` creates process-specific subdirectories
-#'   and removes orphaned session caches automatically.
+#'   operations. Defaults to [nrd_cache_dir()], a persistent package cache that
+#'   supports larger-than-memory out-of-core processing. `easyNRD` creates
+#'   process-specific subdirectories and removes orphaned session caches
+#'   automatically. Override this location for HPC nodes or dedicated scratch
+#'   storage by setting `EASYNRD_CACHE_DIR` or
+#'   `options(easynrd.cache_dir = "/path/to/cache")`.
 #' @param memory_limit Optional DuckDB memory limit as a single string, such as
 #'   `"8GB"`. When `NULL` (default), DuckDB uses its native memory management.
 #'   On restricted institutional servers, set this explicitly to avoid
@@ -48,7 +50,7 @@
 #' }
 nrd_ingest <- function(
   datasets,
-  temp_directory = tempdir(),
+  temp_directory = nrd_cache_dir(),
   memory_limit = NULL,
   threads = NULL,
   preserve_insertion_order = FALSE

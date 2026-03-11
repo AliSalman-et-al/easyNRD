@@ -64,6 +64,38 @@ nrd_window_order <- function(.data, ...) {
   }
 }
 
+#' Resolve the easyNRD Cache Directory
+#'
+#' `nrd_cache_dir()` resolves the package cache directory using a deterministic
+#' fallback hierarchy. This path is used for persistent out-of-core artifacts,
+#' including DuckDB temporary spill files in large NRD workflows.
+#'
+#' Resolution order:
+#' 1. `EASYNRD_CACHE_DIR` environment variable
+#' 2. `getOption("easynrd.cache_dir")`
+#' 3. `tools::R_user_dir("easyNRD", which = "cache")`
+#'
+#' The resolved directory is created if it does not already exist.
+#'
+#' @returns A single character path to the resolved cache directory.
+#' @export
+nrd_cache_dir <- function() {
+  env_path <- Sys.getenv("EASYNRD_CACHE_DIR", unset = "")
+  if (nzchar(env_path)) {
+    cache_path <- env_path
+  } else {
+    opt_path <- getOption("easynrd.cache_dir")
+    if (is.character(opt_path) && length(opt_path) == 1 && !is.na(opt_path) && nzchar(opt_path)) {
+      cache_path <- opt_path
+    } else {
+      cache_path <- tools::R_user_dir("easyNRD", which = "cache")
+    }
+  }
+
+  dir.create(cache_path, recursive = TRUE, showWarnings = FALSE)
+  cache_path
+}
+
 .nrd_extract_codes <- function(.data) {
   dx_cols <- names(tidyselect::eval_select(
     rlang::expr(tidyselect::starts_with("I10_DX")),
