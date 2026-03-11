@@ -16,7 +16,9 @@
 #' downstream phenotype and readmission logic operate on clinically coherent
 #' units. Continuity is defined using transfer-out discharge coding
 #' (`DISPUNIFORM` in `transfer_disp_codes`) and an admit-after-discharge gap of
-#' at most one day.
+#' at most one day. If available in the input, `SAMEDAYEVENT` is retained as
+#' `Episode_SAMEDAYEVENT` so index definitions can follow HCUP guidance (for
+#' example, requiring `Episode_SAMEDAYEVENT == 0L`).
 #' @family pipeline functions
 #' @export
 #'
@@ -91,6 +93,18 @@ nrd_build_episodes <- function(
     rlang::expr(as.numeric(NA))
   }
 
+  sameday_expr <- if ("SAMEDAYEVENT" %in% colnames(row_keyed)) {
+    rlang::expr(
+      dplyr::if_else(
+        sum(dplyr::if_else(is.na(SAMEDAYEVENT), 0L, 1L), na.rm = TRUE) > 0L,
+        max(SAMEDAYEVENT, na.rm = TRUE),
+        NA_integer_
+      )
+    )
+  } else {
+    rlang::expr(NA_integer_)
+  }
+
   row_keyed |>
     dplyr::group_by(YEAR, NRD_VISITLINK, Episode_ID) |>
     dplyr::summarise(
@@ -104,6 +118,7 @@ nrd_build_episodes <- function(
       Episode_DX10 = stringr::str_flatten(DX10_Combined, collapse = ", "),
       Episode_PR10 = stringr::str_flatten(PR10_Combined, collapse = ", "),
       Episode_DX10_Principal = max(.nrd_dx1_first, na.rm = TRUE),
+      Episode_SAMEDAYEVENT = !!sameday_expr,
       DIED = max(DIED, na.rm = TRUE),
       Episode_N_Stays = dplyr::n(),
       .groups = "drop"
@@ -113,7 +128,7 @@ nrd_build_episodes <- function(
         dplyr::select(
           -dplyr::any_of(c(
             "DIED", "LOS", "TOTCHG", "DMONTH", "NRD_DAYSTOEVENT",
-            "DISPUNIFORM", "SAMEDAYEVENT", "NRD_VISITLINK"
+            "DISPUNIFORM", "NRD_VISITLINK"
           )),
           -dplyr::starts_with("I10_DX"),
           -dplyr::starts_with("I10_PR"),

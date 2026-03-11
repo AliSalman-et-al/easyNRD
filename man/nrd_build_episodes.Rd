@@ -27,7 +27,9 @@ linked contiguous discharges into episode-level records so
 downstream phenotype and readmission logic operate on clinically coherent
 units. Continuity is defined using transfer-out discharge coding
 (\code{DISPUNIFORM} in \code{transfer_disp_codes}) and an admit-after-discharge gap of
-at most one day.
+at most one day. If available in the input, \code{SAMEDAYEVENT} is retained as
+\code{Episode_SAMEDAYEVENT} so index definitions can follow HCUP guidance (for
+example, requiring \code{Episode_SAMEDAYEVENT == 0L}).
 }
 \examples{
 \donttest{

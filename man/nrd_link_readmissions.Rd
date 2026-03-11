@@ -46,6 +46,11 @@ Step 3 of the core \code{easyNRD} pipeline. Under \code{censor_method = "drop_mo
 late-year discharges that cannot guarantee full follow-up are retained in the
 data but converted to \code{IndexEvent = 0L}, so they remain eligible as
 readmission candidates for earlier index episodes. For standard readmission
+analyses aligned to HCUP recommendations, include
+\code{Episode_SAMEDAYEVENT == 0L} in \code{index_condition} when that field is
+available from \code{\link[=nrd_build_episodes]{nrd_build_episodes()}}.
+
+For standard readmission
 rate denominators, exclude index stays with \code{outcome_status == "Died at Index"} (typically equivalent to requiring \code{DIED == 0L} at index discharge).
 Those rows can be retained when fitting competing-risks or multi-state
 survival models.
@@ -56,7 +61,7 @@ if (FALSE) {
   linked <- nrd_ingest("/path/to/nrd.parquet") |>
     nrd_build_episodes() |>
     nrd_link_readmissions(
-      index_condition = Episode_DX10_Principal == "I214",
+      index_condition = Episode_DX10_Principal == "I214" & Episode_SAMEDAYEVENT == 0L,
       readmit_condition = DIED == 0L,
       window = 30L,
       readmit_vars = c(Episode_TOTCHG, Episode_LOS, DIED)

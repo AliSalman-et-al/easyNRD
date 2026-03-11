@@ -24,6 +24,11 @@
 #' late-year discharges that cannot guarantee full follow-up are retained in the
 #' data but converted to `IndexEvent = 0L`, so they remain eligible as
 #' readmission candidates for earlier index episodes. For standard readmission
+#' analyses aligned to HCUP recommendations, include
+#' `Episode_SAMEDAYEVENT == 0L` in `index_condition` when that field is
+#' available from [nrd_build_episodes()].
+#'
+#' For standard readmission
 #' rate denominators, exclude index stays with `outcome_status == "Died at
 #' Index"` (typically equivalent to requiring `DIED == 0L` at index discharge).
 #' Those rows can be retained when fitting competing-risks or multi-state
@@ -37,7 +42,7 @@
 #'   linked <- nrd_ingest("/path/to/nrd.parquet") |>
 #'     nrd_build_episodes() |>
 #'     nrd_link_readmissions(
-#'       index_condition = Episode_DX10_Principal == "I214",
+#'       index_condition = Episode_DX10_Principal == "I214" & Episode_SAMEDAYEVENT == 0L,
 #'       readmit_condition = DIED == 0L,
 #'       window = 30L,
 #'       readmit_vars = c(Episode_TOTCHG, Episode_LOS, DIED)
