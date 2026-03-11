@@ -10,7 +10,8 @@ nrd_link_readmissions(
   readmit_condition,
   window = 30L,
   censor_method = c("drop_month", "mid_month"),
-  readmit_vars = NULL
+  readmit_vars = NULL,
+  allow_censored_followup = FALSE
 )
 }
 \arguments{
@@ -31,6 +32,13 @@ time.}
 
 \item{readmit_vars}{Optional tidyselect specification for columns to pull from
 the linked readmission and append as wide \verb{readmit_*} columns.}
+
+\item{allow_censored_followup}{Logical flag that controls treatment of index
+stays discharged too late in the year to complete full same-year follow-up.
+Defaults to \code{FALSE} for strict HCUP-style binary readmission denominators;
+these rows are retained but converted to \code{IndexEvent = 0L}. Set to \code{TRUE}
+to retain such rows as index stays with administrative right-censoring at
+calendar year end.}
 }
 \value{
 A denominator-preserving lazy table with readmission linkage,

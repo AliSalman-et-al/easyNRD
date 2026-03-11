@@ -57,11 +57,20 @@ nrd_as_survey <- function(.data) {
 
   .nrd_assert_cols(.data, c("HOSP_NRD", "DISCWT", "NRD_STRATUM"))
 
+  design_degf <- .data |>
+    dplyr::summarise(
+      .nrd_cluster_n = dplyr::n_distinct(HOSP_NRD),
+      .nrd_strata_n = dplyr::n_distinct(NRD_STRATUM)
+    ) |>
+    dplyr::mutate(.nrd_degf = as.integer(.nrd_cluster_n - .nrd_strata_n)) |>
+    dplyr::pull(.nrd_degf)
+
   srvyr::as_survey(
     .data,
     id = HOSP_NRD,
     weights = DISCWT,
     strata = NRD_STRATUM,
-    nest = TRUE
+    nest = TRUE,
+    degf = design_degf
   )
 }

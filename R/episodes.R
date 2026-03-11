@@ -128,13 +128,13 @@ nrd_build_episodes <- function(
         dplyr::select(
           -dplyr::any_of(c(
             "DIED", "LOS", "TOTCHG", "DMONTH", "NRD_DAYSTOEVENT",
-            "DISPUNIFORM", "NRD_VISITLINK"
+            "DISPUNIFORM"
           )),
           -dplyr::starts_with("I10_DX"),
           -dplyr::starts_with("I10_PR"),
           -dplyr::starts_with("DX10_"),
           -dplyr::starts_with("PR10_")
         ),
-      by = c("YEAR", "Episode_Index_KEY_NRD" = "KEY_NRD")
+        by = c("YEAR", "NRD_VISITLINK", "Episode_Index_KEY_NRD" = "KEY_NRD")
     )
 }

@@ -25,6 +25,7 @@ test_that("nrd_as_survey maps cluster, weights, and strata", {
   expect_identical(as.character(stats::formula(out$cluster))[2], "HOSP_NRD")
   expect_identical(as.character(stats::formula(out$strata))[2], "NRD_STRATUM")
   expect_equal(as.numeric(stats::weights(out)), dat$DISCWT)
+  expect_equal(survey::degf(out), dplyr::n_distinct(dat$HOSP_NRD) - dplyr::n_distinct(dat$NRD_STRATUM))
 })
 
 test_that("nrd_as_survey preserves lazy backend for duckdb tables", {
@@ -48,4 +49,5 @@ test_that("nrd_as_survey preserves lazy backend for duckdb tables", {
 
   expect_s3_class(out, "tbl_svy")
   expect_s3_class(out$variables, "tbl_lazy")
+  expect_equal(survey::degf(out), 1)
 })

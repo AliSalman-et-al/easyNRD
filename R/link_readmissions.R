@@ -16,6 +16,12 @@
 #'   time.
 #' @param readmit_vars Optional tidyselect specification for columns to pull from
 #'   the linked readmission and append as wide `readmit_*` columns.
+#' @param allow_censored_followup Logical flag that controls treatment of index
+#'   stays discharged too late in the year to complete full same-year follow-up.
+#'   Defaults to `FALSE` for strict HCUP-style binary readmission denominators;
+#'   these rows are retained but converted to `IndexEvent = 0L`. Set to `TRUE`
+#'   to retain such rows as index stays with administrative right-censoring at
+#'   calendar year end.
 #'
 #' @returns A denominator-preserving lazy table with readmission linkage,
 #'   `time_to_event`, and `outcome_status`.
@@ -55,7 +61,8 @@ nrd_link_readmissions <- function(
   readmit_condition,
   window = 30L,
   censor_method = c("drop_month", "mid_month"),
-  readmit_vars = NULL
+  readmit_vars = NULL,
+  allow_censored_followup = FALSE
 ) {
   .nrd_assert_lazy_duckdb(.data, arg = ".data")
   .data <- .nrd_standardize_names(.data)
@@ -71,18 +78,39 @@ nrd_link_readmissions <- function(
   stopifnot(is.numeric(window), length(window) == 1, window >= 1)
   window <- as.integer(window)
   censor_method <- rlang::arg_match(censor_method)
+  if (!is.logical(allow_censored_followup) || length(allow_censored_followup) != 1 || is.na(allow_censored_followup)) {
+    rlang::abort("`allow_censored_followup` must be TRUE or FALSE.")
+  }
 
   idx_quo <- rlang::enquo(index_condition)
   readm_quo <- rlang::enquo(readmit_condition)
+
+  month_ends_non_leap <- c(31L, 59L, 90L, 120L, 151L, 181L, 212L, 243L, 273L, 304L, 334L, 365L)
+  month_ends_leap <- c(31L, 60L, 91L, 121L, 152L, 182L, 213L, 244L, 274L, 305L, 335L, 366L)
+
+  max_month_for_window <- function(month_ends, year_days, window_days) {
+    allowable <- which(month_ends <= (year_days - window_days))
+    if (length(allowable) == 0) 0L else as.integer(max(allowable))
+  }
+
+  last_allowable_month_non_leap <- max_month_for_window(month_ends_non_leap, 365L, window)
+  last_allowable_month_leap <- max_month_for_window(month_ends_leap, 366L, window)
 
   base <- .data |>
     dplyr::mutate(IndexEvent = dplyr::if_else(!!idx_quo, 1L, 0L, missing = 0L)) |>
     .nrd_add_year_end_censoring(window = window, censor_method = censor_method) |>
     dplyr::mutate(
+      .nrd_is_leap = (YEAR %% 400L == 0L) | (YEAR %% 4L == 0L & YEAR %% 100L != 0L),
+      .nrd_last_allowable_month = dplyr::if_else(
+        .nrd_is_leap,
+        last_allowable_month_leap,
+        last_allowable_month_non_leap
+      ),
+      .nrd_followup_complete_strict = !is.na(Episode_DMONTH) & Episode_DMONTH <= .nrd_last_allowable_month,
       IndexEvent = dplyr::if_else(
-        censor_method == "drop_month" &
+        !allow_censored_followup &
           IndexEvent == 1L &
-          dplyr::coalesce(.nrd_followup_complete, FALSE) == FALSE,
+          dplyr::coalesce(.nrd_followup_complete_strict, FALSE) == FALSE,
         0L,
         IndexEvent
       )
@@ -91,7 +119,24 @@ nrd_link_readmissions <- function(
   readmit_names <- .nrd_resolve_readmit_vars(base, {{ readmit_vars }})
   readmit_double_map <- .nrd_double_map(base, readmit_names)
 
-  index_pool <- base |>
+  readmit_condition_vars <- intersect(
+    colnames(base),
+    unique(all.vars(rlang::get_expr(readm_quo)))
+  )
+
+  narrow_cols <- unique(c(
+    "YEAR", "NRD_VISITLINK", "Episode_ID", "Episode_KEY_NRD",
+    "Episode_Admission_Day", "Episode_Discharge_Day", "DIED", "Episode_DMONTH",
+    "Days_to_End_of_Year", "IndexEvent", ".nrd_followup_complete",
+    ".nrd_followup_complete_strict", ".nrd_last_allowable_month",
+    readmit_names,
+    readmit_condition_vars
+  ))
+
+  narrow_base <- base |>
+    dplyr::select(dplyr::any_of(narrow_cols))
+
+  index_pool <- narrow_base |>
     dplyr::filter(
       IndexEvent == 1L,
       !is.na(NRD_VISITLINK),
@@ -102,16 +147,14 @@ nrd_link_readmissions <- function(
       NRD_VISITLINK,
       Episode_ID_idx = Episode_ID,
       Episode_KEY_NRD_idx = Episode_KEY_NRD,
-      Episode_Discharge_Day_idx = Episode_Discharge_Day,
-      DIED_idx = DIED,
-      Days_to_End_of_Year_idx = Days_to_End_of_Year
+      Episode_Discharge_Day_idx = Episode_Discharge_Day
     )
 
   candidate_cols <- unique(c(
     "Episode_ID", "Episode_KEY_NRD", "Episode_Admission_Day", readmit_names
   ))
 
-  candidate_pool <- base |>
+  candidate_pool <- narrow_base |>
     dplyr::filter(
       !is.na(NRD_VISITLINK),
       !is.na(Episode_Admission_Day),
@@ -135,8 +178,8 @@ nrd_link_readmissions <- function(
     dplyr::filter(dplyr::between(.nrd_gap_days, 1L, window))
 
   first_candidates <- paired |>
-    dplyr::group_by(YEAR, Episode_KEY_NRD_idx) |>
-    dplyr::filter(.nrd_gap_days == min(.nrd_gap_days, na.rm = TRUE))
+    dplyr::group_by(YEAR, NRD_VISITLINK, Episode_KEY_NRD_idx) |>
+    dplyr::slice_min(order_by = .nrd_gap_days, n = 1L, with_ties = TRUE)
 
   summarise_exprs <- list(
     first_readmit_gap = rlang::expr(min(.nrd_gap_days, na.rm = TRUE)),
@@ -154,12 +197,12 @@ nrd_link_readmissions <- function(
   }
 
   first_map <- first_candidates |>
-    dplyr::group_by(YEAR, Episode_KEY_NRD_idx) |>
+    dplyr::group_by(YEAR, NRD_VISITLINK, Episode_KEY_NRD_idx) |>
     dplyr::summarise(!!!summarise_exprs, .groups = "drop") |>
     dplyr::rename(Episode_KEY_NRD = Episode_KEY_NRD_idx)
 
   base |>
-    dplyr::left_join(first_map, by = c("YEAR", "Episode_KEY_NRD")) |>
+    dplyr::left_join(first_map, by = c("YEAR", "NRD_VISITLINK", "Episode_KEY_NRD")) |>
     dplyr::mutate(
       time_to_event = dplyr::case_when(
         IndexEvent == 0L ~ NA_real_,
@@ -178,5 +221,12 @@ nrd_link_readmissions <- function(
         TRUE ~ "Censored"
       )
     ) |>
-    dplyr::select(-Episode_KEY_NRD_cand, -first_readmit_gap, -dplyr::any_of(".nrd_followup_complete"))
+    dplyr::select(
+      -Episode_KEY_NRD_cand,
+      -first_readmit_gap,
+      -dplyr::any_of(c(
+        ".nrd_followup_complete", ".nrd_is_leap",
+        ".nrd_last_allowable_month", ".nrd_followup_complete_strict"
+      ))
+    )
 }

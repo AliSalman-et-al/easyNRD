@@ -4,18 +4,20 @@
 \alias{nrd_ingest}
 \title{Ingest NRD Parquet Files Lazily}
 \usage{
-nrd_ingest(datasets, temp_directory = NULL, memory_limit = NULL)
+nrd_ingest(datasets, temp_directory = tempdir(), memory_limit = NULL)
 }
 \arguments{
 \item{datasets}{Character vector of parquet file paths, an Arrow dataset,
 an Arrow query, or an existing DuckDB-backed lazy table.}
 
-\item{temp_directory}{Optional DuckDB spill directory used for temporary
-on-disk operations. Provide a single path string (for example, a fast local
-SSD directory) to reduce RAM pressure during large window operations.}
+\item{temp_directory}{DuckDB spill directory used for temporary on-disk
+operations. Defaults to \code{\link[base:tempfile]{base::tempdir()}}. Provide a single path string
+(for example, a fast local SSD directory) to reduce RAM pressure during
+large window operations.}
 
 \item{memory_limit}{Optional DuckDB memory limit as a single string, such as
-\code{"8GB"}.}
+\code{"8GB"}. When \code{NULL} (default), \code{easyNRD} sets DuckDB memory usage to 80\%
+of available system RAM.}
 }
 \value{
 A lazy table, typically \code{tbl_dbi} backed by DuckDB.
