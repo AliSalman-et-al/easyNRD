@@ -241,3 +241,72 @@ nrd_window_order <- function(.data, ...) {
 
   FALSE
 }
+
+.nrd_list_session_temp_dirs <- function(temp_directory) {
+  if (!dir.exists(temp_directory)) {
+    return(character(0))
+  }
+
+  dirs <- list.dirs(temp_directory, recursive = FALSE, full.names = TRUE)
+  dirs[grepl("^easyNRD_[0-9]+$", basename(dirs))]
+}
+
+.nrd_extract_session_pid <- function(dir_path) {
+  dir_name <- basename(dir_path)
+  pid_chr <- sub("^easyNRD_", "", dir_name)
+  suppressWarnings(as.integer(pid_chr))
+}
+
+.nrd_pid_is_alive <- function(pid) {
+  if (!is.numeric(pid) || length(pid) != 1 || is.na(pid) || pid <= 0) {
+    return(FALSE)
+  }
+
+  isTRUE(tryCatch(
+    tools::pskill(as.integer(pid), 0),
+    error = function(e) FALSE,
+    warning = function(w) FALSE
+  ))
+}
+
+.nrd_remove_dir_safe <- function(dir_path) {
+  tryCatch(
+    {
+      unlink(dir_path, recursive = TRUE, force = TRUE)
+      !dir.exists(dir_path)
+    },
+    error = function(e) FALSE,
+    warning = function(w) FALSE
+  )
+}
+
+.nrd_cleanup_session_temp_dirs <- function(temp_directory, force = FALSE) {
+  dirs <- .nrd_list_session_temp_dirs(temp_directory)
+  if (length(dirs) == 0) {
+    return(list(removed = 0L, discovered = 0L, candidates = 0L))
+  }
+
+  if (isTRUE(force)) {
+    dirs_to_remove <- dirs
+  } else {
+    pids <- vapply(dirs, .nrd_extract_session_pid, FUN.VALUE = integer(1))
+    is_alive <- vapply(pids, .nrd_pid_is_alive, FUN.VALUE = logical(1))
+    dirs_to_remove <- dirs[!is_alive]
+  }
+
+  if (length(dirs_to_remove) == 0) {
+    return(list(
+      removed = 0L,
+      discovered = as.integer(length(dirs)),
+      candidates = 0L
+    ))
+  }
+
+  removed <- sum(vapply(dirs_to_remove, .nrd_remove_dir_safe, FUN.VALUE = logical(1)))
+
+  list(
+    removed = as.integer(removed),
+    discovered = as.integer(length(dirs)),
+    candidates = as.integer(length(dirs_to_remove))
+  )
+}

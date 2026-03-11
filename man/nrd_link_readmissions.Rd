@@ -61,7 +61,9 @@ available from \code{\link[=nrd_build_episodes]{nrd_build_episodes()}}.
 For standard readmission
 rate denominators, exclude index stays with \code{outcome_status == "Died at Index"} (typically equivalent to requiring \code{DIED == 0L} at index discharge).
 Those rows can be retained when fitting competing-risks or multi-state
-survival models.
+survival models. The output preserves \code{DIED} and linked event timing fields,
+so it can be passed directly to competing-risk modeling workflows in
+\code{survival}.
 }
 \examples{
 \donttest{
@@ -80,6 +82,8 @@ if (FALSE) {
 \seealso{
 Other pipeline functions: 
 \code{\link{nrd_build_episodes}()},
-\code{\link{nrd_ingest}()}
+\code{\link{nrd_cleanup}()},
+\code{\link{nrd_ingest}()},
+\code{\link{nrd_materialize}()}
 }
 \concept{pipeline functions}

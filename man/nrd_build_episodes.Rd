@@ -41,7 +41,9 @@ if (FALSE) {
 }
 \seealso{
 Other pipeline functions: 
+\code{\link{nrd_cleanup}()},
 \code{\link{nrd_ingest}()},
-\code{\link{nrd_link_readmissions}()}
+\code{\link{nrd_link_readmissions}()},
+\code{\link{nrd_materialize}()}
 }
 \concept{pipeline functions}

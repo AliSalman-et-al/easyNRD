@@ -9,10 +9,19 @@
 #' @param temp_directory DuckDB spill directory used for temporary on-disk
 #'   operations. Defaults to [base::tempdir()]. Provide a single path string
 #'   (for example, a fast local SSD directory) to reduce RAM pressure during
-#'   large window operations.
+#'   large window operations. `easyNRD` creates process-specific subdirectories
+#'   and removes orphaned session caches automatically.
 #' @param memory_limit Optional DuckDB memory limit as a single string, such as
-#'   `"8GB"`. When `NULL` (default), `easyNRD` sets DuckDB memory usage to 80%
-#'   of available system RAM.
+#'   `"8GB"`. When `NULL` (default), DuckDB uses its native memory management.
+#'   On restricted institutional servers, set this explicitly to avoid
+#'   out-of-memory failures during wide joins or large materialization steps.
+#' @param threads Optional number of DuckDB worker threads. When `NULL`
+#'   (default), DuckDB uses its native thread management. Set this explicitly on
+#'   shared HPC nodes to prevent over-allocation.
+#' @param preserve_insertion_order Logical flag controlling DuckDB insertion
+#'   order guarantees. Defaults to `FALSE`, which applies
+#'   `SET preserve_insertion_order=false` and reduces buffering pressure during
+#'   large parquet materialization.
 #'
 #' @section Hardware Optimizations:
 #' For best performance and stability on constrained hardware, pre-process raw
@@ -31,109 +40,149 @@
 #'   raw_nrd <- nrd_ingest(
 #'     c("/path/to/NRD_2019_CORE.parquet", "/path/to/NRD_2020_CORE.parquet"),
 #'     temp_directory = "/fast_scratch/duckdb_tmp",
-#'     memory_limit = "8GB"
+#'     memory_limit = "8GB",
+#'     threads = 4L,
+#'     preserve_insertion_order = FALSE
 #'   )
 #' }
 #' }
-nrd_ingest <- function(datasets, temp_directory = tempdir(), memory_limit = NULL) {
+nrd_ingest <- function(
+  datasets,
+  temp_directory = tempdir(),
+  memory_limit = NULL,
+  threads = NULL,
+  preserve_insertion_order = FALSE
+) {
   if (!is.character(temp_directory) ||
     length(temp_directory) != 1 ||
     is.na(temp_directory) ||
     nchar(temp_directory) == 0) {
-    rlang::abort("`temp_directory` must be a single, non-empty string.")
+    cli::cli_abort(c(
+      "`temp_directory` must be a single, non-empty path string.",
+      i = "Use a fast local scratch directory when possible."
+    ))
   }
 
   if (!is.null(memory_limit) &&
     (!is.character(memory_limit) || length(memory_limit) != 1 || is.na(memory_limit) || nchar(memory_limit) == 0)) {
-    rlang::abort("`memory_limit` must be NULL or a single, non-empty string like '8GB'.")
+    cli::cli_abort(c(
+      "`memory_limit` must be `NULL` or a single, non-empty string like `8GB`.",
+      i = "Set this explicitly for containerized jobs or institutional HPC quotas."
+    ))
   }
 
-  detect_available_ram_bytes <- function() {
-    if (.Platform$OS.type == "windows") {
-      available_mb <- suppressWarnings(utils::memory.limit())
-      if (is.finite(available_mb) && available_mb > 0) {
-        return(as.numeric(available_mb) * 1024^2)
-      }
-      return(NA_real_)
-    }
-
-    if (Sys.info()[["sysname"]] == "Linux") {
-      if (file.exists("/proc/meminfo")) {
-        mem_lines <- readLines("/proc/meminfo", warn = FALSE)
-        mem_available <- grep("^MemAvailable:", mem_lines, value = TRUE)
-        mem_total <- grep("^MemTotal:", mem_lines, value = TRUE)
-        mem_line <- if (length(mem_available) > 0) mem_available[[1]] else if (length(mem_total) > 0) mem_total[[1]] else NA_character_
-        if (!is.na(mem_line)) {
-          kb <- suppressWarnings(as.numeric(gsub("[^0-9]", "", mem_line)))
-          if (is.finite(kb) && kb > 0) {
-            return(kb * 1024)
-          }
-        }
-      }
-      return(NA_real_)
-    }
-
-    if (Sys.info()[["sysname"]] == "Darwin") {
-      memsize <- suppressWarnings(system2("sysctl", c("-n", "hw.memsize"), stdout = TRUE, stderr = FALSE))
-      if (length(memsize) > 0) {
-        bytes <- suppressWarnings(as.numeric(memsize[[1]]))
-        if (is.finite(bytes) && bytes > 0) {
-          return(bytes)
-        }
-      }
-      return(NA_real_)
-    }
-
-    NA_real_
+  if (!is.null(threads) &&
+    (!is.numeric(threads) || length(threads) != 1 || is.na(threads) || threads < 1 || threads != as.integer(threads))) {
+    cli::cli_abort(c(
+      "`threads` must be `NULL` or a single positive integer.",
+      i = "Examples: `threads = 4L`, `threads = 8L`."
+    ))
   }
 
-  auto_memory_limit <- NULL
-  if (is.null(memory_limit)) {
-    available_ram <- detect_available_ram_bytes()
-    if (is.finite(available_ram) && available_ram > 0) {
-      memory_mb <- floor((available_ram * 0.8) / 1024^2)
-      if (is.finite(memory_mb) && memory_mb > 0) {
-        auto_memory_limit <- paste0(memory_mb, "MB")
-      }
-    }
+  if (!is.logical(preserve_insertion_order) ||
+    length(preserve_insertion_order) != 1 ||
+    is.na(preserve_insertion_order)) {
+    cli::cli_abort("`preserve_insertion_order` must be TRUE or FALSE.")
   }
 
-  configure_duckdb <- function(con) {
-    if (!dir.exists(temp_directory)) {
-      dir.create(temp_directory, recursive = TRUE, showWarnings = FALSE)
-    }
+  if (!dir.exists(temp_directory)) {
+    dir.create(temp_directory, recursive = TRUE, showWarnings = FALSE)
+  }
 
-    temp_directory_sql <- as.character(DBI::dbQuoteString(con, temp_directory))
+  .nrd_cleanup_session_temp_dirs(temp_directory = temp_directory, force = FALSE)
+
+  configure_duckdb <- function(con, session_temp_dir) {
+    temp_directory_sql <- as.character(DBI::dbQuoteString(con, session_temp_dir))
     DBI::dbExecute(con, paste0("PRAGMA temp_directory=", temp_directory_sql))
 
-    effective_memory_limit <- if (is.null(memory_limit)) auto_memory_limit else memory_limit
-    if (!is.null(effective_memory_limit)) {
-      memory_limit_sql <- as.character(DBI::dbQuoteString(con, effective_memory_limit))
-      DBI::dbExecute(con, paste0("PRAGMA memory_limit=", memory_limit_sql))
+    if (!isTRUE(preserve_insertion_order)) {
+      DBI::dbExecute(con, "SET preserve_insertion_order=false")
+    }
+
+    if (!is.null(memory_limit)) {
+      memory_limit_sql <- as.character(DBI::dbQuoteString(con, memory_limit))
+      DBI::dbExecute(con, paste0("SET memory_limit=", memory_limit_sql))
+    }
+
+    if (!is.null(threads)) {
+      DBI::dbExecute(con, paste0("SET threads=", as.integer(threads)))
     }
 
     con
   }
 
+  created_connection <- FALSE
+  existing_nrd_env <- NULL
+
   tbl <- if (inherits(datasets, "tbl_lazy")) {
     .nrd_assert_lazy_duckdb(datasets, arg = "datasets")
+    existing_nrd_env <- attr(datasets, "nrd_env", exact = TRUE)
     datasets
   } else if (inherits(datasets, "ArrowTabular") ||
     inherits(datasets, "arrow_dplyr_query")) {
+    session_temp_dir <- file.path(temp_directory, paste0("easyNRD_", Sys.getpid()))
+    dir.create(session_temp_dir, showWarnings = FALSE, recursive = TRUE)
+
     con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
-    con <- configure_duckdb(con)
+    con <- configure_duckdb(con, session_temp_dir = session_temp_dir)
+    created_connection <- TRUE
     arrow::to_duckdb(datasets, con = con)
   } else {
     if (!is.character(datasets) || length(datasets) == 0) {
       rlang::abort("`datasets` must be a non-empty character vector of parquet paths.")
     }
 
+    session_temp_dir <- file.path(temp_directory, paste0("easyNRD_", Sys.getpid()))
+    dir.create(session_temp_dir, showWarnings = FALSE, recursive = TRUE)
+
     con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
-    con <- configure_duckdb(con)
+    con <- configure_duckdb(con, session_temp_dir = session_temp_dir)
+    created_connection <- TRUE
     arrow::open_dataset(datasets, unify_schemas = TRUE, format = "parquet") |>
       arrow::to_duckdb(con = con)
   }
 
   .nrd_assert_lazy_duckdb(tbl, arg = "datasets")
-  .nrd_standardize_names(tbl)
+  lazy_tbl <- .nrd_standardize_names(tbl)
+
+  if (isTRUE(created_connection)) {
+    nrd_env <- new.env(parent = emptyenv())
+    nrd_env$con <- con
+    nrd_env$session_temp_dir <- session_temp_dir
+
+    reg.finalizer(
+      nrd_env,
+      function(e) {
+        tryCatch(
+          {
+            if (!is.null(e$con) && DBI::dbIsValid(e$con)) {
+              DBI::dbDisconnect(e$con, shutdown = TRUE)
+            }
+          },
+          error = function(err) NULL
+        )
+
+        tryCatch(
+          {
+            if (!is.null(e$session_temp_dir) && dir.exists(e$session_temp_dir)) {
+              unlink(e$session_temp_dir, recursive = TRUE, force = TRUE)
+            }
+          },
+          error = function(err) NULL
+        )
+
+        invisible(NULL)
+      },
+      onexit = TRUE
+    )
+
+    attr(lazy_tbl, "nrd_env") <- nrd_env
+    return(lazy_tbl)
+  }
+
+  if (!is.null(existing_nrd_env)) {
+    attr(lazy_tbl, "nrd_env") <- existing_nrd_env
+  }
+
+  lazy_tbl
 }

@@ -7,7 +7,7 @@ utils::globalVariables(
     ".nrd_year_days", "DIED", "DISPUNIFORM", "DMONTH", "Days_to_End_of_Year",
     "DX10_Combined", "Episode_Admission_Day", "Episode_Admission_Day_cand",
     "Episode_DMONTH", "Episode_Discharge_Day",
-    "Days_to_End_of_Year_idx", "DIED_idx", "Episode_Discharge_Day_idx", "Episode_DX10_Principal", "Episode_ID",
+    "Days_to_End_of_Year_idx", "DIED_idx", "Episode_Discharge_Day_cand", "Episode_Discharge_Day_idx", "Episode_DX10_Principal", "Episode_ID",
     "Episode_ID_cand", "Episode_ID_idx", "Episode_Index_KEY_NRD", "Episode_KEY_NRD",
     "Episode_KEY_NRD_cand", "Episode_KEY_NRD_idx", "Episode_LOS", "I10_DX1",
     "DISCWT", "HOSP_NRD", "IndexEvent", "KEY_NRD", "LOS", "NRD_DAYSTOEVENT", "NRD_STRATUM", "NRD_VISITLINK",

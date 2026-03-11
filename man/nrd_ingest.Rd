@@ -4,7 +4,13 @@
 \alias{nrd_ingest}
 \title{Ingest NRD Parquet Files Lazily}
 \usage{
-nrd_ingest(datasets, temp_directory = tempdir(), memory_limit = NULL)
+nrd_ingest(
+  datasets,
+  temp_directory = tempdir(),
+  memory_limit = NULL,
+  threads = NULL,
+  preserve_insertion_order = FALSE
+)
 }
 \arguments{
 \item{datasets}{Character vector of parquet file paths, an Arrow dataset,
@@ -13,11 +19,22 @@ an Arrow query, or an existing DuckDB-backed lazy table.}
 \item{temp_directory}{DuckDB spill directory used for temporary on-disk
 operations. Defaults to \code{\link[base:tempfile]{base::tempdir()}}. Provide a single path string
 (for example, a fast local SSD directory) to reduce RAM pressure during
-large window operations.}
+large window operations. \code{easyNRD} creates process-specific subdirectories
+and removes orphaned session caches automatically.}
 
 \item{memory_limit}{Optional DuckDB memory limit as a single string, such as
-\code{"8GB"}. When \code{NULL} (default), \code{easyNRD} sets DuckDB memory usage to 80\%
-of available system RAM.}
+\code{"8GB"}. When \code{NULL} (default), DuckDB uses its native memory management.
+On restricted institutional servers, set this explicitly to avoid
+out-of-memory failures during wide joins or large materialization steps.}
+
+\item{threads}{Optional number of DuckDB worker threads. When \code{NULL}
+(default), DuckDB uses its native thread management. Set this explicitly on
+shared HPC nodes to prevent over-allocation.}
+
+\item{preserve_insertion_order}{Logical flag controlling DuckDB insertion
+order guarantees. Defaults to \code{FALSE}, which applies
+\verb{SET preserve_insertion_order=false} and reduces buffering pressure during
+large parquet materialization.}
 }
 \value{
 A lazy table, typically \code{tbl_dbi} backed by DuckDB.
@@ -42,7 +59,9 @@ if (FALSE) {
   raw_nrd <- nrd_ingest(
     c("/path/to/NRD_2019_CORE.parquet", "/path/to/NRD_2020_CORE.parquet"),
     temp_directory = "/fast_scratch/duckdb_tmp",
-    memory_limit = "8GB"
+    memory_limit = "8GB",
+    threads = 4L,
+    preserve_insertion_order = FALSE
   )
 }
 }
@@ -50,6 +69,8 @@ if (FALSE) {
 \seealso{
 Other pipeline functions: 
 \code{\link{nrd_build_episodes}()},
-\code{\link{nrd_link_readmissions}()}
+\code{\link{nrd_cleanup}()},
+\code{\link{nrd_link_readmissions}()},
+\code{\link{nrd_materialize}()}
 }
 \concept{pipeline functions}

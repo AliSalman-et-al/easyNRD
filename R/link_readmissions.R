@@ -38,7 +38,9 @@
 #' rate denominators, exclude index stays with `outcome_status == "Died at
 #' Index"` (typically equivalent to requiring `DIED == 0L` at index discharge).
 #' Those rows can be retained when fitting competing-risks or multi-state
-#' survival models.
+#' survival models. The output preserves `DIED` and linked event timing fields,
+#' so it can be passed directly to competing-risk modeling workflows in
+#' `survival`.
 #' @family pipeline functions
 #' @export
 #'
@@ -124,19 +126,7 @@ nrd_link_readmissions <- function(
     unique(all.vars(rlang::get_expr(readm_quo)))
   )
 
-  narrow_cols <- unique(c(
-    "YEAR", "NRD_VISITLINK", "Episode_ID", "Episode_KEY_NRD",
-    "Episode_Admission_Day", "Episode_Discharge_Day", "DIED", "Episode_DMONTH",
-    "Days_to_End_of_Year", "IndexEvent", ".nrd_followup_complete",
-    ".nrd_followup_complete_strict", ".nrd_last_allowable_month",
-    readmit_names,
-    readmit_condition_vars
-  ))
-
-  narrow_base <- base |>
-    dplyr::select(dplyr::any_of(narrow_cols))
-
-  index_pool <- narrow_base |>
+  index_pool <- base |>
     dplyr::filter(
       IndexEvent == 1L,
       !is.na(NRD_VISITLINK),
@@ -150,21 +140,25 @@ nrd_link_readmissions <- function(
       Episode_Discharge_Day_idx = Episode_Discharge_Day
     )
 
-  candidate_cols <- unique(c(
-    "Episode_ID", "Episode_KEY_NRD", "Episode_Admission_Day", readmit_names
+  rhs_cols <- unique(c(
+    "YEAR", "NRD_VISITLINK", "Episode_ID", "Episode_KEY_NRD",
+    "Episode_Admission_Day", "Episode_Discharge_Day",
+    readmit_names,
+    readmit_condition_vars
   ))
 
-  candidate_pool <- narrow_base |>
+  candidate_pool <- base |>
+    dplyr::select(dplyr::any_of(rhs_cols)) |>
     dplyr::filter(
       !is.na(NRD_VISITLINK),
       !is.na(Episode_Admission_Day),
       !!readm_quo
     ) |>
-    dplyr::select(YEAR, NRD_VISITLINK, dplyr::any_of(candidate_cols)) |>
     dplyr::rename(
       Episode_ID_cand = Episode_ID,
       Episode_KEY_NRD_cand = Episode_KEY_NRD,
-      Episode_Admission_Day_cand = Episode_Admission_Day
+      Episode_Admission_Day_cand = Episode_Admission_Day,
+      Episode_Discharge_Day_cand = Episode_Discharge_Day
     )
 
   paired <- index_pool |>
