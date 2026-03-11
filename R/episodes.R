@@ -8,15 +8,15 @@
 #' @param .data A lazy NRD table from [nrd_ingest()].
 #' @param transfer_disp_codes Integer `DISPUNIFORM` codes that indicate
 #'   transfer out. Defaults to `2L`.
-#' @param transfer_sameday_codes Integer `SAMEDAYEVENT` codes that indicate
-#'   same-day continuity. Defaults to `c(1L, 2L, 4L)`.
 #'
 #' @returns A lazy episode-level table.
 #' @details
 #' Step 2 of the core `easyNRD` pipeline. This function consolidates transfer-
-#' linked and same-day contiguous discharges into episode-level records so
+#' linked contiguous discharges into episode-level records so
 #' downstream phenotype and readmission logic operate on clinically coherent
-#' units.
+#' units. Continuity is defined using transfer-out discharge coding
+#' (`DISPUNIFORM` in `transfer_disp_codes`) and an admit-after-discharge gap of
+#' at most one day.
 #' @family pipeline functions
 #' @export
 #'
@@ -29,8 +29,7 @@
 #' }
 nrd_build_episodes <- function(
   .data,
-  transfer_disp_codes = 2L,
-  transfer_sameday_codes = c(1L, 2L, 4L)
+  transfer_disp_codes = 2L
 ) {
   .nrd_assert_lazy_duckdb(.data, arg = ".data")
   .data <- .nrd_standardize_names(.data)
@@ -39,7 +38,7 @@ nrd_build_episodes <- function(
     .data,
     c(
       "YEAR", "NRD_VISITLINK", "KEY_NRD", "NRD_DAYSTOEVENT", "LOS",
-      "DISPUNIFORM", "SAMEDAYEVENT", "DMONTH", "DIED", "I10_DX1"
+      "DISPUNIFORM", "DMONTH", "DIED", "I10_DX1"
     )
   )
 
@@ -53,14 +52,13 @@ nrd_build_episodes <- function(
       .nrd_admit_day = as.numeric(NRD_DAYSTOEVENT),
       .nrd_los = as.numeric(LOS),
       .nrd_discharge_day_row = .nrd_admit_day + .nrd_los,
-      .nrd_transfer_trigger = DISPUNIFORM %in% transfer_disp_codes &
-        SAMEDAYEVENT %in% transfer_sameday_codes,
+      .nrd_transfer_trigger = DISPUNIFORM %in% transfer_disp_codes,
       .nrd_prev_trigger = dplyr::lag(.nrd_transfer_trigger, default = FALSE),
       .nrd_prev_discharge = dplyr::lag(.nrd_discharge_day_row),
       .nrd_contiguous = dplyr::coalesce(.nrd_prev_trigger, FALSE) &
         !is.na(.nrd_admit_day) &
         !is.na(.nrd_prev_discharge) &
-        .nrd_admit_day == .nrd_prev_discharge,
+        dplyr::between(.nrd_admit_day - .nrd_prev_discharge, 0, 1),
       Episode_ID = cumsum(dplyr::if_else(.nrd_contiguous, 0L, 1L))
     ) |>
     dplyr::ungroup()
@@ -100,6 +98,7 @@ nrd_build_episodes <- function(
       Episode_KEY_NRD = max(Episode_KEY_NRD, na.rm = TRUE),
       Episode_DMONTH = max(Episode_DMONTH, na.rm = TRUE),
       Episode_Admission_Day = min(.nrd_admit_day, na.rm = TRUE),
+      Episode_Discharge_Day = max(.nrd_discharge_day_row, na.rm = TRUE),
       Episode_LOS = sum(.nrd_los, na.rm = TRUE),
       Episode_TOTCHG = !!totchg_expr,
       Episode_DX10 = stringr::str_flatten(DX10_Combined, collapse = ", "),
@@ -109,7 +108,6 @@ nrd_build_episodes <- function(
       Episode_N_Stays = dplyr::n(),
       .groups = "drop"
     ) |>
-    dplyr::mutate(Episode_Discharge_Day = Episode_Admission_Day + Episode_LOS) |>
     dplyr::left_join(
       base_tbl |>
         dplyr::select(

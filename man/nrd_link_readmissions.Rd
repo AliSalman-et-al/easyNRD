@@ -45,7 +45,10 @@ denominator.
 Step 3 of the core \code{easyNRD} pipeline. Under \code{censor_method = "drop_month"},
 late-year discharges that cannot guarantee full follow-up are retained in the
 data but converted to \code{IndexEvent = 0L}, so they remain eligible as
-readmission candidates for earlier index episodes.
+readmission candidates for earlier index episodes. For standard readmission
+rate denominators, exclude index stays with \code{outcome_status == "Died at Index"} (typically equivalent to requiring \code{DIED == 0L} at index discharge).
+Those rows can be retained when fitting competing-risks or multi-state
+survival models.
 }
 \examples{
 \donttest{

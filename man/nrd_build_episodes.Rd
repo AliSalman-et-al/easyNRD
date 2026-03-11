@@ -4,20 +4,13 @@
 \alias{nrd_build_episodes}
 \title{Consolidate NRD Discharges into Clinical Episodes}
 \usage{
-nrd_build_episodes(
-  .data,
-  transfer_disp_codes = 2L,
-  transfer_sameday_codes = c(1L, 2L, 4L)
-)
+nrd_build_episodes(.data, transfer_disp_codes = 2L)
 }
 \arguments{
 \item{.data}{A lazy NRD table from \code{\link[=nrd_ingest]{nrd_ingest()}}.}
 
 \item{transfer_disp_codes}{Integer \code{DISPUNIFORM} codes that indicate
 transfer out. Defaults to \code{2L}.}
-
-\item{transfer_sameday_codes}{Integer \code{SAMEDAYEVENT} codes that indicate
-same-day continuity. Defaults to \code{c(1L, 2L, 4L)}.}
 }
 \value{
 A lazy episode-level table.
@@ -30,9 +23,11 @@ The result remains lazy so users can continue phenotyping with
 }
 \details{
 Step 2 of the core \code{easyNRD} pipeline. This function consolidates transfer-
-linked and same-day contiguous discharges into episode-level records so
+linked contiguous discharges into episode-level records so
 downstream phenotype and readmission logic operate on clinically coherent
-units.
+units. Continuity is defined using transfer-out discharge coding
+(\code{DISPUNIFORM} in \code{transfer_disp_codes}) and an admit-after-discharge gap of
+at most one day.
 }
 \examples{
 \donttest{

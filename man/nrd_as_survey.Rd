@@ -25,8 +25,10 @@ directly on the database backend using \code{dplyr::group_by()} with \code{srvyr
 verbs like \code{srvyr::survey_mean()} and \code{srvyr::survey_total()}.
 \item Track 2 (in-memory inferential modeling): for models such as
 \code{survey::svyglm()} or \code{survey::svycoxph()}, first call
-\code{dplyr::collect()} on the lazy survey object to bring the targeted subset
-into memory.
+\code{srvyr::filter()} on the survey object to define the analysis domain,
+then call \code{dplyr::collect()} to bring the targeted subset into memory.
+Re-instantiate the in-memory design with \code{survey::svydesign()} before
+fitting model functions from \code{survey}.
 }
 }
 \examples{
@@ -35,15 +37,26 @@ if (FALSE) {
   design_lazy <- nrd_ingest("/path/to/linked_output.parquet") |>
     nrd_as_survey()
 
-  design_lazy |>
-    dplyr::group_by(outcome_status) |>
-    dplyr::summarise(readmit_rate = srvyr::survey_mean(IndexEvent == 1L))
+  # Domain analysis starts after survey design instantiation.
+  index_domain <- design_lazy |>
+    srvyr::filter(IndexEvent == 1L)
 
-  model_data <- design_lazy |>
-    dplyr::filter(IndexEvent == 1L) |>
+  index_domain |>
+    dplyr::group_by(outcome_status) |>
+    dplyr::summarise(readmit_rate = srvyr::survey_mean(outcome_status == "Readmitted"))
+
+  model_data <- index_domain |>
     dplyr::collect()
 
-  survey::svyglm(IndexEvent ~ AGE + FEMALE, design = model_data)
+  model_design <- survey::svydesign(
+    ids = ~HOSP_NRD,
+    strata = ~NRD_STRATUM,
+    weights = ~DISCWT,
+    data = model_data,
+    nest = TRUE
+  )
+
+  survey::svyglm(outcome_status == "Readmitted" ~ AGE + FEMALE, design = model_design)
 }
 }
 }
