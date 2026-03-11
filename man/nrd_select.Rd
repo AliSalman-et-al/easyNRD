@@ -27,8 +27,11 @@ linkage and complex survey design, even if they are not explicitly requested:
 \code{YEAR}, \code{NRD_VISITLINK}, \code{Episode_ID}, \code{HOSP_NRD}, \code{DISCWT}, and
 \code{NRD_STRATUM}.
 
-If readmission linkage outputs are present in \code{.data}, they are also retained
-automatically: \code{IndexEvent}, \code{time_to_event}, and \code{outcome_status}.
+If readmission linkage or timing variables are present in \code{.data}, they are
+also retained automatically to prevent pipeline failures:
+\code{Episode_KEY_NRD}, \code{Episode_Admission_Day}, \code{Episode_Discharge_Day},
+\code{Episode_DMONTH}, \code{DIED}, \code{IndexEvent}, \code{Readmit}, \code{DaysToReadmit},
+\code{time_to_event}, and \code{outcome_status}.
 }
 \examples{
 if (FALSE) {

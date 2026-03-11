@@ -1,4 +1,4 @@
-test_that("nrd_select retains mandatory variables", {
+test_that("nrd_select retains mandatory and conditional variables when present", {
   dat <- tibble::tibble(
     YEAR = 2019L,
     NRD_VISITLINK = "A0001",
@@ -6,16 +6,23 @@ test_that("nrd_select retains mandatory variables", {
     HOSP_NRD = 101L,
     DISCWT = 2.5,
     NRD_STRATUM = 11L,
+    Episode_KEY_NRD = 10001L,
+    Episode_Admission_Day = 10L,
+    Episode_Discharge_Day = 12L,
+    Episode_DMONTH = 1L,
+    DIED = 0L,
     IndexEvent = 1L,
+    Readmit = 1L,
+    DaysToReadmit = 7L,
     time_to_event = 12,
     outcome_status = "Readmitted",
-    dummy_001 = 1,
-    dummy_002 = 2,
-    dummy_003 = 3
+    Episode_DX10 = "I214",
+    Episode_PR10 = "02703ZZ",
+    some_noise_var = 1
   )
 
   out <- dat |>
-    nrd_select(dummy_001)
+    nrd_select(some_noise_var)
 
   expected <- c(
     "YEAR",
@@ -27,47 +34,50 @@ test_that("nrd_select retains mandatory variables", {
     "IndexEvent",
     "time_to_event",
     "outcome_status",
-    "dummy_001"
+    "Episode_KEY_NRD",
+    "Episode_Admission_Day",
+    "Episode_Discharge_Day",
+    "Episode_DMONTH",
+    "DIED",
+    "DaysToReadmit",
+    "Readmit",
+    "some_noise_var"
   )
 
-  expect_setequal(names(out), expected)
+  expect_identical(names(out), expected)
+  expect_false("Episode_DX10" %in% names(out))
+  expect_false("Episode_PR10" %in% names(out))
 })
 
-test_that("nrd_select conditionally retains linkage variables", {
-  dat_with_linkage <- tibble::tibble(
+test_that("nrd_select works when conditional variables are absent", {
+  dat <- tibble::tibble(
     YEAR = 2019L,
     NRD_VISITLINK = "A0001",
     Episode_ID = 1L,
     HOSP_NRD = 101L,
     DISCWT = 2.5,
     NRD_STRATUM = 11L,
-    IndexEvent = 1L,
-    time_to_event = 12,
-    outcome_status = "Readmitted",
-    dummy_001 = 1
+    Episode_DX10 = "I214",
+    some_noise_var = 1
   )
-
-  dat_without_linkage <- tibble::tibble(
-    YEAR = 2019L,
-    NRD_VISITLINK = "A0001",
-    Episode_ID = 1L,
-    HOSP_NRD = 101L,
-    DISCWT = 2.5,
-    NRD_STRATUM = 11L,
-    dummy_001 = 1
-  )
-
-  out_with_linkage <- dat_with_linkage |>
-    nrd_select(dummy_001)
-
-  expect_true(all(c("IndexEvent", "time_to_event", "outcome_status") %in% names(out_with_linkage)))
 
   expect_no_error({
-    out_without_linkage <- dat_without_linkage |>
-      nrd_select(dummy_001)
+    out <- dat |>
+      nrd_select(some_noise_var)
   })
 
-  expect_false(any(c("IndexEvent", "time_to_event", "outcome_status") %in% names(out_without_linkage)))
+  expected <- c(
+    "YEAR",
+    "NRD_VISITLINK",
+    "Episode_ID",
+    "HOSP_NRD",
+    "DISCWT",
+    "NRD_STRATUM",
+    "some_noise_var"
+  )
+
+  expect_identical(names(out), expected)
+  expect_false("Episode_DX10" %in% names(out))
 })
 
 test_that("nrd_demographics and nrd_hospital_vars work in nrd_select", {

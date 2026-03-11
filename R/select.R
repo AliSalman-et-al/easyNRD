@@ -9,8 +9,11 @@
 #' `YEAR`, `NRD_VISITLINK`, `Episode_ID`, `HOSP_NRD`, `DISCWT`, and
 #' `NRD_STRATUM`.
 #'
-#' If readmission linkage outputs are present in `.data`, they are also retained
-#' automatically: `IndexEvent`, `time_to_event`, and `outcome_status`.
+#' If readmission linkage or timing variables are present in `.data`, they are
+#' also retained automatically to prevent pipeline failures:
+#' `Episode_KEY_NRD`, `Episode_Admission_Day`, `Episode_Discharge_Day`,
+#' `Episode_DMONTH`, `DIED`, `IndexEvent`, `Readmit`, `DaysToReadmit`,
+#' `time_to_event`, and `outcome_status`.
 #'
 #' @param .data A data frame, lazy table, or Arrow query.
 #' @param ... <[`tidy-select`][dplyr::dplyr_tidy_select]> Columns to keep.
@@ -37,7 +40,18 @@ nrd_select <- function(.data, ...) {
     "NRD_STRATUM"
   )
 
-  conditional_vars <- c("IndexEvent", "time_to_event", "outcome_status")
+  conditional_vars <- c(
+    "IndexEvent",
+    "time_to_event",
+    "outcome_status",
+    "Episode_KEY_NRD",
+    "Episode_Admission_Day",
+    "Episode_Discharge_Day",
+    "Episode_DMONTH",
+    "DIED",
+    "DaysToReadmit",
+    "Readmit"
+  )
 
   dplyr::select(
     .data,
