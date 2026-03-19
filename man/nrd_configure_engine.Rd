@@ -9,7 +9,7 @@ nrd_configure_engine(
   memory_limit = NULL,
   temp_directory = NULL,
   threads = NULL,
-  preserve_insertion_order = FALSE
+  preserve_insertion_order = NULL
 )
 }
 \arguments{
@@ -18,15 +18,16 @@ nrd_configure_engine(
 \item{memory_limit}{Optional DuckDB memory limit string (for example,
 \code{"8GB"}). If \code{NULL}, the pragma is not modified.}
 
-\item{temp_directory}{Optional existing directory path used by DuckDB for
-temporary spill files. If \code{NULL}, the pragma is not modified.}
+\item{temp_directory}{Optional existing base directory path used by DuckDB
+for temporary spill files. If non-\code{NULL}, a process-specific
+\verb{easyNRD_<pid>} subdirectory is created and configured as DuckDB's
+temporary directory.}
 
 \item{threads}{Optional positive integer for DuckDB worker threads. If
 \code{NULL}, the pragma is not modified.}
 
-\item{preserve_insertion_order}{Logical scalar controlling DuckDB insertion
-order guarantees. Defaults to \code{FALSE} to reduce buffering pressure for
-large parquet scans and materialization.}
+\item{preserve_insertion_order}{Optional logical scalar controlling DuckDB
+insertion order guarantees. If \code{NULL}, this setting is not modified.}
 }
 \value{
 The input DuckDB connection, invisibly.

@@ -1,8 +1,8 @@
 #' Flag Clinical Conditions via Dictionary Filtering
 #'
 #' `nrd_flag_condition()` builds an exact-match ICD-10 dictionary by evaluating
-#' a regular expression against the distinct set of clinical codes in the source
-#' table. The resulting dictionary is injected into `dplyr::if_any()` so
+#' a regular expression against package-internal static ICD-10 reference
+#' vectors. The resulting dictionary is injected into `dplyr::if_any()` so
 #' `dbplyr` can render SQL `IN (...)` predicates instead of query-time regex
 #' matching across concatenated strings.
 #'
@@ -68,19 +68,18 @@ nrd_flag_condition <- function(
     rlang::abort("No clinical columns matched `type` and `scope`.")
   }
 
-  distinct_codes <- data |>
-    dplyr::select(dplyr::all_of(scoped_cols)) |>
-    tidyr::pivot_longer(
-      cols = dplyr::everything(),
-      names_to = "Code_Position",
-      values_to = "ICD10_Code"
-    ) |>
-    dplyr::filter(!is.na(ICD10_Code)) |>
-    dplyr::distinct(ICD10_Code) |>
-    dplyr::collect() |>
-    dplyr::pull(ICD10_Code)
+  reference_codes <- if (identical(type, "dx")) {
+    nrd_all_dx_codes
+  } else {
+    nrd_all_pr_codes
+  }
 
-  exact_dictionary <- distinct_codes[grepl(regex_pattern, distinct_codes, perl = TRUE)]
+  exact_dictionary <- grep(
+    pattern = regex_pattern,
+    x = reference_codes,
+    perl = TRUE,
+    value = TRUE
+  )
   exact_dictionary <- unique(stats::na.omit(exact_dictionary))
 
   condition_sym <- rlang::sym(condition_name)

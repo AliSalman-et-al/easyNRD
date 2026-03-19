@@ -2,11 +2,14 @@ test_that("nrd_configure_engine validates connection and temp directory", {
   con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
 
+  tmp_root <- tempfile("nrd_cfg_tmp_")
+  dir.create(tmp_root, recursive = TRUE)
+
   expect_no_error(
     nrd_configure_engine(
       con,
       memory_limit = "512MB",
-      temp_directory = tempdir(),
+      temp_directory = tmp_root,
       threads = 1L,
       preserve_insertion_order = FALSE
     )
@@ -25,9 +28,6 @@ test_that("nrd_configure_engine validates connection and temp directory", {
 })
 
 test_that("nrd_ingest configures per-process spill directory", {
-  temp_root <- tempfile("nrd_ingest_tmp_")
-  dir.create(temp_root, recursive = TRUE)
-
   parquet_path <- tempfile(fileext = ".parquet")
   arrow::write_parquet(
     tibble::tibble(
@@ -44,18 +44,12 @@ test_that("nrd_ingest configures per-process spill directory", {
     parquet_path
   )
 
-  lazy_tbl <- nrd_ingest(
-    parquet_path,
-    temp_directory = temp_root,
-    memory_limit = "256MB",
-    threads = 1L,
-    preserve_insertion_order = FALSE
-  )
+  lazy_tbl <- nrd_ingest(parquet_path)
 
   nrd_env <- attr(lazy_tbl, "nrd_env", exact = TRUE)
   expect_true(is.environment(nrd_env))
   expect_true(dir.exists(nrd_env$session_temp_dir))
-  expect_true(startsWith(normalizePath(nrd_env$session_temp_dir), normalizePath(temp_root)))
+  expect_true(startsWith(normalizePath(nrd_env$session_temp_dir), normalizePath(nrd_cache_dir())))
   expect_match(basename(nrd_env$session_temp_dir), "^easyNRD_[0-9]+$")
 
   temp_setting <- DBI::dbGetQuery(
@@ -88,7 +82,7 @@ test_that("nrd_flag_condition renders SQL IN clauses without regex or concat", {
   flagged <- nrd_flag_condition(
     lazy_tbl,
     condition_name = "is_diabetes",
-    regex_pattern = "^E11",
+    regex_pattern = "^(E11|S82)",
     type = "dx",
     scope = "all"
   )
@@ -96,6 +90,7 @@ test_that("nrd_flag_condition renders SQL IN clauses without regex or concat", {
   sql <- dbplyr::sql_render(flagged)
 
   expect_match(sql, "\\bIN\\s*\\(", perl = TRUE)
+  expect_match(sql, "S82001A", fixed = TRUE)
   expect_no_match(sql, "REGEXP|regexp_matches", ignore.case = TRUE)
   expect_no_match(sql, "CONCAT_WS|\\|\\|", perl = TRUE, ignore.case = TRUE)
 

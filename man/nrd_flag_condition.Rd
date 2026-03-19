@@ -31,8 +31,8 @@ A lazy DuckDB table with one additional logical condition flag column.
 }
 \description{
 \code{nrd_flag_condition()} builds an exact-match ICD-10 dictionary by evaluating
-a regular expression against the distinct set of clinical codes in the source
-table. The resulting dictionary is injected into \code{dplyr::if_any()} so
+a regular expression against package-internal static ICD-10 reference
+vectors. The resulting dictionary is injected into \code{dplyr::if_any()} so
 \code{dbplyr} can render SQL \code{IN (...)} predicates instead of query-time regex
 matching across concatenated strings.
 }

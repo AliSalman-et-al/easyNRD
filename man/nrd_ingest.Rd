@@ -4,35 +4,11 @@
 \alias{nrd_ingest}
 \title{Ingest NRD Parquet Files Lazily}
 \usage{
-nrd_ingest(
-  datasets,
-  temp_directory = nrd_cache_dir(),
-  memory_limit = NULL,
-  threads = NULL,
-  preserve_insertion_order = FALSE
-)
+nrd_ingest(datasets)
 }
 \arguments{
 \item{datasets}{Character vector of parquet file paths, an Arrow dataset,
 an Arrow query, or an existing DuckDB-backed lazy table.}
-
-\item{temp_directory}{DuckDB spill directory used for temporary on-disk
-operations. Defaults to \code{\link[=nrd_cache_dir]{nrd_cache_dir()}}, a persistent package cache that
-supports larger-than-memory out-of-core processing. \code{easyNRD} creates
-process-specific subdirectories and removes orphaned session caches
-automatically. Override this location for HPC nodes or dedicated scratch
-storage by setting \code{EASYNRD_CACHE_DIR} or
-\code{options(easynrd.cache_dir = "/path/to/cache")}.}
-
-\item{memory_limit}{Optional DuckDB memory limit as a single string, such as
-\code{"8GB"}. When \code{NULL} (default), DuckDB uses its native memory management.}
-
-\item{threads}{Optional number of DuckDB worker threads. When \code{NULL}
-(default), DuckDB uses its native thread management.}
-
-\item{preserve_insertion_order}{Logical flag controlling DuckDB insertion
-order guarantees. Defaults to \code{FALSE}, which reduces buffering pressure
-during large parquet processing.}
 }
 \value{
 A lazy table, typically \code{tbl_dbi} backed by DuckDB.
@@ -48,11 +24,7 @@ if (FALSE) {
   raw_nrd <- nrd_ingest(c(
     "/path/to/NRD_2019_CORE.parquet",
     "/path/to/NRD_2020_CORE.parquet"
-  ),
-  temp_directory = "/fast_scratch/duckdb_tmp",
-  memory_limit = "8GB",
-  threads = 4L,
-  preserve_insertion_order = FALSE)
+  ))
 }
 }
 }
