@@ -15,22 +15,11 @@
 #'   `options(easynrd.cache_dir = "/path/to/cache")`.
 #' @param memory_limit Optional DuckDB memory limit as a single string, such as
 #'   `"8GB"`. When `NULL` (default), DuckDB uses its native memory management.
-#'   On restricted institutional servers, set this explicitly to avoid
-#'   out-of-memory failures during wide joins or large materialization steps.
 #' @param threads Optional number of DuckDB worker threads. When `NULL`
-#'   (default), DuckDB uses its native thread management. Set this explicitly on
-#'   shared HPC nodes to prevent over-allocation.
+#'   (default), DuckDB uses its native thread management.
 #' @param preserve_insertion_order Logical flag controlling DuckDB insertion
-#'   order guarantees. Defaults to `FALSE`, which applies
-#'   `SET preserve_insertion_order=false` and reduces buffering pressure during
-#'   large parquet materialization.
-#'
-#' @section Hardware Optimizations:
-#' For best performance and stability on constrained hardware, pre-process raw
-#' parquet files so they are partitioned by `YEAR` and sorted by
-#' `NRD_VISITLINK` then `NRD_DAYSTOEVENT`. This layout helps DuckDB leverage
-#' parquet row-group min/max statistics to skip irrelevant blocks and minimize
-#' expensive external sorting.
+#'   order guarantees. Defaults to `FALSE`, which reduces buffering pressure
+#'   during large parquet processing.
 #'
 #' @returns A lazy table, typically `tbl_dbi` backed by DuckDB.
 #' @family pipeline functions
@@ -39,13 +28,14 @@
 #' @examples
 #' \donttest{
 #' if (FALSE) {
-#'   raw_nrd <- nrd_ingest(
-#'     c("/path/to/NRD_2019_CORE.parquet", "/path/to/NRD_2020_CORE.parquet"),
-#'     temp_directory = "/fast_scratch/duckdb_tmp",
-#'     memory_limit = "8GB",
-#'     threads = 4L,
-#'     preserve_insertion_order = FALSE
-#'   )
+#'   raw_nrd <- nrd_ingest(c(
+#'     "/path/to/NRD_2019_CORE.parquet",
+#'     "/path/to/NRD_2020_CORE.parquet"
+#'   ),
+#'   temp_directory = "/fast_scratch/duckdb_tmp",
+#'   memory_limit = "8GB",
+#'   threads = 4L,
+#'   preserve_insertion_order = FALSE)
 #' }
 #' }
 nrd_ingest <- function(
@@ -87,46 +77,40 @@ nrd_ingest <- function(
     cli::cli_abort("`preserve_insertion_order` must be TRUE or FALSE.")
   }
 
-  if (!dir.exists(temp_directory)) {
-    dir.create(temp_directory, recursive = TRUE, showWarnings = FALSE)
-  }
-
-  .nrd_cleanup_session_temp_dirs(temp_directory = temp_directory, force = FALSE)
-
-  configure_duckdb <- function(con, session_temp_dir) {
-    temp_directory_sql <- as.character(DBI::dbQuoteString(con, session_temp_dir))
-    DBI::dbExecute(con, paste0("PRAGMA temp_directory=", temp_directory_sql))
-
-    if (!isTRUE(preserve_insertion_order)) {
-      DBI::dbExecute(con, "SET preserve_insertion_order=false")
-    }
-
-    if (!is.null(memory_limit)) {
-      memory_limit_sql <- as.character(DBI::dbQuoteString(con, memory_limit))
-      DBI::dbExecute(con, paste0("SET memory_limit=", memory_limit_sql))
-    }
-
-    if (!is.null(threads)) {
-      DBI::dbExecute(con, paste0("SET threads=", as.integer(threads)))
-    }
-
-    con
-  }
-
   created_connection <- FALSE
   existing_nrd_env <- NULL
+  session_temp_dir <- NULL
 
   tbl <- if (inherits(datasets, "tbl_lazy")) {
     .nrd_assert_lazy_duckdb(datasets, arg = "datasets")
+    if (!identical(temp_directory, nrd_cache_dir()) ||
+      !is.null(memory_limit) ||
+      !is.null(threads) ||
+      !identical(preserve_insertion_order, FALSE)) {
+      cli::cli_abort(c(
+        "Engine options can only be set when creating a new DuckDB connection.",
+        i = "For existing lazy tables, call `nrd_configure_engine(dbplyr::remote_con(datasets), ...)` directly."
+      ))
+    }
     existing_nrd_env <- attr(datasets, "nrd_env", exact = TRUE)
     datasets
   } else if (inherits(datasets, "ArrowTabular") ||
     inherits(datasets, "arrow_dplyr_query")) {
+    if (!dir.exists(temp_directory)) {
+      dir.create(temp_directory, recursive = TRUE, showWarnings = FALSE)
+    }
+    .nrd_cleanup_session_temp_dirs(temp_directory = temp_directory, force = FALSE)
     session_temp_dir <- file.path(temp_directory, paste0("easyNRD_", Sys.getpid()))
     dir.create(session_temp_dir, showWarnings = FALSE, recursive = TRUE)
 
     con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
-    con <- configure_duckdb(con, session_temp_dir = session_temp_dir)
+    nrd_configure_engine(
+      con,
+      memory_limit = memory_limit,
+      temp_directory = session_temp_dir,
+      threads = threads,
+      preserve_insertion_order = preserve_insertion_order
+    )
     created_connection <- TRUE
     arrow::to_duckdb(datasets, con = con)
   } else {
@@ -134,11 +118,21 @@ nrd_ingest <- function(
       rlang::abort("`datasets` must be a non-empty character vector of parquet paths.")
     }
 
+    if (!dir.exists(temp_directory)) {
+      dir.create(temp_directory, recursive = TRUE, showWarnings = FALSE)
+    }
+    .nrd_cleanup_session_temp_dirs(temp_directory = temp_directory, force = FALSE)
     session_temp_dir <- file.path(temp_directory, paste0("easyNRD_", Sys.getpid()))
     dir.create(session_temp_dir, showWarnings = FALSE, recursive = TRUE)
 
     con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
-    con <- configure_duckdb(con, session_temp_dir = session_temp_dir)
+    nrd_configure_engine(
+      con,
+      memory_limit = memory_limit,
+      temp_directory = session_temp_dir,
+      threads = threads,
+      preserve_insertion_order = preserve_insertion_order
+    )
     created_connection <- TRUE
     arrow::open_dataset(datasets, unify_schemas = TRUE, format = "parquet") |>
       arrow::to_duckdb(con = con)

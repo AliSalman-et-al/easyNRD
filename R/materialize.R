@@ -25,7 +25,7 @@
 #' \donttest{
 #' if (FALSE) {
 #'   checkpoint <- nrd_ingest("/path/to/nrd.parquet") |>
-#'     dplyr::mutate(ami_flag = stringr::str_detect(Episode_DX10, "I21")) |>
+#'     dplyr::mutate(ami_flag = I10_DX1 %in% c("I210", "I211")) |>
 #'     nrd_materialize(name = "m_ami")
 #'
 #'   checkpoint_disk <- checkpoint |>

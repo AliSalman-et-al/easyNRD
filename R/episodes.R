@@ -44,10 +44,7 @@ nrd_build_episodes <- function(
     )
   )
 
-  base_tbl <- .data |>
-    .nrd_extract_codes()
-
-  row_level <- base_tbl |>
+  row_level <- .data |>
     dplyr::group_by(YEAR, NRD_VISITLINK) |>
     nrd_window_order(NRD_DAYSTOEVENT, KEY_NRD) |>
     dplyr::mutate(
@@ -115,8 +112,6 @@ nrd_build_episodes <- function(
       Episode_Discharge_Day = max(.nrd_discharge_day_row, na.rm = TRUE),
       Episode_LOS = sum(.nrd_los, na.rm = TRUE),
       Episode_TOTCHG = !!totchg_expr,
-      Episode_DX10 = stringr::str_flatten(DX10_Combined, collapse = ", "),
-      Episode_PR10 = stringr::str_flatten(PR10_Combined, collapse = ", "),
       Episode_DX10_Principal = max(.nrd_dx1_first, na.rm = TRUE),
       Episode_SAMEDAYEVENT = !!sameday_expr,
       DIED = max(DIED, na.rm = TRUE),
@@ -124,16 +119,13 @@ nrd_build_episodes <- function(
       .groups = "drop"
     ) |>
     dplyr::left_join(
-      base_tbl |>
+      .data |>
         dplyr::select(
           -dplyr::any_of(c(
             "DIED", "LOS", "TOTCHG", "DMONTH", "NRD_DAYSTOEVENT",
             "DISPUNIFORM"
           )),
-          -dplyr::starts_with("I10_DX"),
-          -dplyr::starts_with("I10_PR"),
-          -dplyr::starts_with("DX10_"),
-          -dplyr::starts_with("PR10_")
+          -dplyr::any_of(c("Episode_ID", "Episode_DX10_Principal"))
         ),
         by = c("YEAR", "NRD_VISITLINK", "Episode_Index_KEY_NRD" = "KEY_NRD")
     )

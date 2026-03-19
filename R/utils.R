@@ -96,59 +96,6 @@ nrd_cache_dir <- function() {
   cache_path
 }
 
-.nrd_extract_codes <- function(.data) {
-  dx_cols <- names(tidyselect::eval_select(
-    rlang::expr(tidyselect::starts_with("I10_DX")),
-    data = .data
-  ))
-  pr_cols <- names(tidyselect::eval_select(
-    rlang::expr(tidyselect::starts_with("I10_PR")),
-    data = .data
-  ))
-
-  if (.nrd_is_lazy_table(.data)) {
-    dx_combined_expr <- if (length(dx_cols) > 0) {
-      rlang::parse_expr(
-        paste0("CONCAT_WS(', ', ", paste(dx_cols, collapse = ", "), ")")
-      )
-    } else {
-      rlang::expr(NA_character_)
-    }
-
-    pr_combined_expr <- if (length(pr_cols) > 0) {
-      rlang::parse_expr(
-        paste0("CONCAT_WS(', ', ", paste(pr_cols, collapse = ", "), ")")
-      )
-    } else {
-      rlang::expr(NA_character_)
-    }
-
-    return(dplyr::mutate(
-      .data,
-      DX10_Combined = !!dx_combined_expr,
-      PR10_Combined = !!pr_combined_expr
-    ))
-  }
-
-  local_concat_ws <- function(.tbl, cols) {
-    if (length(cols) == 0) {
-      return(rep(NA_character_, nrow(.tbl)))
-    }
-
-    mat <- as.data.frame(dplyr::select(.tbl, dplyr::all_of(cols)))
-    apply(mat, 1, function(x) {
-      vals <- x[!is.na(x) & nzchar(x)]
-      if (length(vals) == 0) NA_character_ else paste(vals, collapse = ", ")
-    })
-  }
-
-  dplyr::mutate(
-    .data,
-    DX10_Combined = local_concat_ws(.data, dx_cols),
-    PR10_Combined = local_concat_ws(.data, pr_cols)
-  )
-}
-
 .nrd_add_year_end_censoring <- function(
   .data,
   window = 30L,

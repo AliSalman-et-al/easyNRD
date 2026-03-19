@@ -25,18 +25,14 @@ storage by setting \code{EASYNRD_CACHE_DIR} or
 \code{options(easynrd.cache_dir = "/path/to/cache")}.}
 
 \item{memory_limit}{Optional DuckDB memory limit as a single string, such as
-\code{"8GB"}. When \code{NULL} (default), DuckDB uses its native memory management.
-On restricted institutional servers, set this explicitly to avoid
-out-of-memory failures during wide joins or large materialization steps.}
+\code{"8GB"}. When \code{NULL} (default), DuckDB uses its native memory management.}
 
 \item{threads}{Optional number of DuckDB worker threads. When \code{NULL}
-(default), DuckDB uses its native thread management. Set this explicitly on
-shared HPC nodes to prevent over-allocation.}
+(default), DuckDB uses its native thread management.}
 
 \item{preserve_insertion_order}{Logical flag controlling DuckDB insertion
-order guarantees. Defaults to \code{FALSE}, which applies
-\verb{SET preserve_insertion_order=false} and reduces buffering pressure during
-large parquet materialization.}
+order guarantees. Defaults to \code{FALSE}, which reduces buffering pressure
+during large parquet processing.}
 }
 \value{
 A lazy table, typically \code{tbl_dbi} backed by DuckDB.
@@ -46,25 +42,17 @@ A lazy table, typically \code{tbl_dbi} backed by DuckDB.
 The function standardizes common HCUP name variants and keeps data out-of-core
 for downstream pipeline steps.
 }
-\section{Hardware Optimizations}{
-
-For best performance and stability on constrained hardware, pre-process raw
-parquet files so they are partitioned by \code{YEAR} and sorted by
-\code{NRD_VISITLINK} then \code{NRD_DAYSTOEVENT}. This layout helps DuckDB leverage
-parquet row-group min/max statistics to skip irrelevant blocks and minimize
-expensive external sorting.
-}
-
 \examples{
 \donttest{
 if (FALSE) {
-  raw_nrd <- nrd_ingest(
-    c("/path/to/NRD_2019_CORE.parquet", "/path/to/NRD_2020_CORE.parquet"),
-    temp_directory = "/fast_scratch/duckdb_tmp",
-    memory_limit = "8GB",
-    threads = 4L,
-    preserve_insertion_order = FALSE
-  )
+  raw_nrd <- nrd_ingest(c(
+    "/path/to/NRD_2019_CORE.parquet",
+    "/path/to/NRD_2020_CORE.parquet"
+  ),
+  temp_directory = "/fast_scratch/duckdb_tmp",
+  memory_limit = "8GB",
+  threads = 4L,
+  preserve_insertion_order = FALSE)
 }
 }
 }

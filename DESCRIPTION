@@ -28,6 +28,7 @@ Imports:
     srvyr,
     stringr,
     tibble,
+    tidyr,
     tidyselect
 Suggests:
     survey,
