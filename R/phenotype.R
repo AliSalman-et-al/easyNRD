@@ -1,101 +1,108 @@
-#' Flag Clinical Conditions via Dictionary Filtering
-#'
-#' `nrd_flag_condition()` builds an exact-match ICD-10 dictionary by evaluating
-#' a regular expression against package-internal static ICD-10 reference
-#' vectors. The resulting dictionary is injected into `dplyr::if_any()` so
-#' `dbplyr` can render SQL `IN (...)` predicates instead of query-time regex
-#' matching across concatenated strings.
-#'
-#' @param data A lazy DuckDB table.
-#' @param condition_name Name of the output binary flag column.
-#' @param regex_pattern A regular expression used in-memory to define the code
-#'   dictionary.
-#' @param type Clinical code family. Use `"dx"` for diagnosis fields or `"pr"`
-#'   for procedure fields.
-#' @param scope Column scope for matching. Use `"principal"`, `"secondary"`, or
-#'   `"all"`.
-#'
-#' @return A lazy DuckDB table with one additional logical condition flag column.
-#' @export
-#'
-#' @examples
-#' if (FALSE) {
-#'   flagged <- nrd_ingest("/path/to/nrd.parquet") |>
-#'     nrd_flag_condition(
-#'       condition_name = "is_ami",
-#'       regex_pattern = "^I21",
-#'       type = "dx",
-#'       scope = "principal"
-#'     )
-#' }
-nrd_flag_condition <- function(
-  data,
-  condition_name,
-  regex_pattern,
-  type = c("dx", "pr"),
-  scope = c("all", "principal", "secondary")
-) {
-  .nrd_assert_lazy_duckdb(data, arg = "data")
-
-  if (!is.character(condition_name) || length(condition_name) != 1 || is.na(condition_name) || !nzchar(condition_name)) {
-    rlang::abort("`condition_name` must be a single non-empty string.")
-  }
-
-  if (!is.character(regex_pattern) || length(regex_pattern) != 1 || is.na(regex_pattern) || !nzchar(regex_pattern)) {
-    rlang::abort("`regex_pattern` must be a single non-empty string.")
-  }
-
-  type <- rlang::arg_match(type)
-  scope <- rlang::arg_match(scope)
-
-  selector_expr <- if (identical(type, "dx") && identical(scope, "principal")) {
-    rlang::expr(I10_DX1)
+# Resolve diagnosis or procedure columns for a requested scope.
+.nrd_condition_columns <- function(data, type, scope) {
+  selector <- if (identical(type, "dx") && identical(scope, "principal")) {
+    rlang::expr(dplyr::all_of("I10_DX1"))
   } else if (identical(type, "dx") && identical(scope, "secondary")) {
     rlang::expr(tidyselect::num_range("I10_DX", 2:40))
-  } else if (identical(type, "dx") && identical(scope, "all")) {
+  } else if (identical(type, "dx")) {
     rlang::expr(tidyselect::starts_with("I10_DX"))
   } else if (identical(type, "pr") && identical(scope, "principal")) {
-    rlang::expr(I10_PR1)
+    rlang::expr(dplyr::all_of("I10_PR1"))
   } else if (identical(type, "pr") && identical(scope, "secondary")) {
     rlang::expr(tidyselect::num_range("I10_PR", 2:25))
   } else {
     rlang::expr(tidyselect::starts_with("I10_PR"))
   }
 
-  scoped_cols <- names(tidyselect::eval_select(selector_expr, data = data))
-
-  if (length(scoped_cols) == 0) {
-    rlang::abort("No clinical columns matched `type` and `scope`.")
+  cols <- names(tidyselect::eval_select(selector, data = data))
+  if (length(cols) == 0) {
+    rlang::abort(
+      paste0(
+        "No columns matched `type = \"", type, "\"` and `scope = \"", scope, "\"`."
+      )
+    )
   }
 
-  reference_codes <- if (identical(type, "dx")) {
-    nrd_all_dx_codes
-  } else {
-    nrd_all_pr_codes
+  cols
+}
+
+# Build the condition expression for regex or exact-code matching.
+.nrd_condition_predicate <- function(cols, pattern = NULL, codes = NULL) {
+  if (!is.null(pattern)) {
+    return(
+      rlang::expr(
+        dplyr::if_any(
+          dplyr::all_of(!!cols),
+          ~ grepl(!!pattern, .x)
+        )
+      )
+    )
   }
 
-  exact_dictionary <- grep(
-    pattern = regex_pattern,
-    x = reference_codes,
-    perl = TRUE,
-    value = TRUE
+  rlang::expr(
+    dplyr::if_any(
+      dplyr::all_of(!!cols),
+      ~ .x %in% !!codes
+    )
   )
-  exact_dictionary <- unique(stats::na.omit(exact_dictionary))
+}
 
-  condition_sym <- rlang::sym(condition_name)
+#' Flag diagnosis or procedure conditions
+#'
+#' `nrd_flag_condition()` adds a logical flag based on regex matching or exact
+#' code matching across NRD diagnosis or procedure columns.
+#'
+#' @param data A DuckDB-backed lazy table returned by [nrd_ingest()].
+#' @param name Name of the output logical flag column.
+#' @param pattern Optional regular expression applied directly to data values.
+#' @param codes Optional character vector of exact codes to match.
+#' @param type Either `"dx"` or `"pr"`.
+#' @param scope One of `"principal"`, `"secondary"`, or `"all"`.
+#'
+#' @returns A DuckDB-backed `tbl_lazy` with one additional logical column.
+#' @export
+#'
+#' @examples
+#' if (FALSE) {
+#'   data <- nrd_ingest("/path/to/nrd.parquet")
+#'   flagged <- nrd_flag_condition(data, "is_ami", pattern = "^I21", type = "dx", scope = "all")
+#' }
+nrd_flag_condition <- function(
+  data,
+  name,
+  pattern = NULL,
+  codes = NULL,
+  type,
+  scope
+) {
+  .nrd_assert_duckdb_lazy(data)
 
-  if (length(exact_dictionary) == 0) {
-    return(dplyr::mutate(data, !!condition_sym := FALSE))
+  if (!is.character(name) || length(name) != 1 || is.na(name) || !nzchar(name)) {
+    rlang::abort("`name` must be a single, non-empty string.")
   }
+
+  has_pattern <- !is.null(pattern)
+  has_codes <- !is.null(codes)
+  if (identical(has_pattern, has_codes)) {
+    rlang::abort("Exactly one of `pattern` or `codes` must be supplied.")
+  }
+
+  if (has_pattern && (!is.character(pattern) || length(pattern) != 1 || is.na(pattern) || !nzchar(pattern))) {
+    rlang::abort("`pattern` must be a single, non-empty string when supplied.")
+  }
+
+  if (has_codes && (!is.character(codes) || length(codes) == 0 || any(is.na(codes)))) {
+    rlang::abort("`codes` must be a non-empty character vector with no missing values.")
+  }
+
+  type <- rlang::arg_match(type, c("dx", "pr"))
+  scope <- rlang::arg_match(scope, c("principal", "secondary", "all"))
+
+  cols <- .nrd_condition_columns(data, type = type, scope = scope)
+  predicate <- .nrd_condition_predicate(cols, pattern = pattern, codes = codes)
 
   dplyr::mutate(
     data,
-    !!condition_sym := dplyr::coalesce(
-      dplyr::if_any(
-        dplyr::all_of(scoped_cols),
-        ~ .x %in% !!exact_dictionary
-      ),
-      FALSE
-    )
+    !!rlang::sym(name) := dplyr::coalesce(!!predicate, FALSE)
   )
 }

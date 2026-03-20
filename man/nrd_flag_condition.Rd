@@ -2,48 +2,33 @@
 % Please edit documentation in R/phenotype.R
 \name{nrd_flag_condition}
 \alias{nrd_flag_condition}
-\title{Flag Clinical Conditions via Dictionary Filtering}
+\title{Flag diagnosis or procedure conditions}
 \usage{
-nrd_flag_condition(
-  data,
-  condition_name,
-  regex_pattern,
-  type = c("dx", "pr"),
-  scope = c("all", "principal", "secondary")
-)
+nrd_flag_condition(data, name, pattern = NULL, codes = NULL, type, scope)
 }
 \arguments{
-\item{data}{A lazy DuckDB table.}
+\item{data}{A DuckDB-backed lazy table returned by \code{\link[=nrd_ingest]{nrd_ingest()}}.}
 
-\item{condition_name}{Name of the output binary flag column.}
+\item{name}{Name of the output logical flag column.}
 
-\item{regex_pattern}{A regular expression used in-memory to define the code
-dictionary.}
+\item{pattern}{Optional regular expression applied directly to data values.}
 
-\item{type}{Clinical code family. Use \code{"dx"} for diagnosis fields or \code{"pr"}
-for procedure fields.}
+\item{codes}{Optional character vector of exact codes to match.}
 
-\item{scope}{Column scope for matching. Use \code{"principal"}, \code{"secondary"}, or
-\code{"all"}.}
+\item{type}{Either \code{"dx"} or \code{"pr"}.}
+
+\item{scope}{One of \code{"principal"}, \code{"secondary"}, or \code{"all"}.}
 }
 \value{
-A lazy DuckDB table with one additional logical condition flag column.
+A DuckDB-backed \code{tbl_lazy} with one additional logical column.
 }
 \description{
-\code{nrd_flag_condition()} builds an exact-match ICD-10 dictionary by evaluating
-a regular expression against package-internal static ICD-10 reference
-vectors. The resulting dictionary is injected into \code{dplyr::if_any()} so
-\code{dbplyr} can render SQL \code{IN (...)} predicates instead of query-time regex
-matching across concatenated strings.
+\code{nrd_flag_condition()} adds a logical flag based on regex matching or exact
+code matching across NRD diagnosis or procedure columns.
 }
 \examples{
 if (FALSE) {
-  flagged <- nrd_ingest("/path/to/nrd.parquet") |>
-    nrd_flag_condition(
-      condition_name = "is_ami",
-      regex_pattern = "^I21",
-      type = "dx",
-      scope = "principal"
-    )
+  data <- nrd_ingest("/path/to/nrd.parquet")
+  flagged <- nrd_flag_condition(data, "is_ami", pattern = "^I21", type = "dx", scope = "all")
 }
 }
