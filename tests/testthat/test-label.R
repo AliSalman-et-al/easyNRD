@@ -1,4 +1,4 @@
-test_that("nrd_label default labels known coded columns", {
+test_that("default call labels all dictionary columns and overwrites originals", {
   mock_data <- tibble::tibble(
     FEMALE = c(0L, 1L, 1L),
     PAY1 = c(1L, 3L, 6L),
@@ -15,7 +15,7 @@ test_that("nrd_label default labels known coded columns", {
   expect_identical(out$AGE, mock_data$AGE)
 })
 
-test_that("nrd_label explicit selection updates only selected columns", {
+test_that("explicit column selection labels only the named columns", {
   mock_data <- tibble::tibble(
     FEMALE = c(0L, 1L),
     PAY1 = c(2L, 4L),
@@ -30,7 +30,7 @@ test_that("nrd_label explicit selection updates only selected columns", {
   expect_identical(out$PAY1, mock_data$PAY1)
 })
 
-test_that("nrd_label keep_original appends label columns", {
+test_that("keep_original preserves coded columns and appends label columns", {
   mock_data <- tibble::tibble(
     FEMALE = c(0L, 1L),
     PAY1 = c(1L, 5L),
@@ -45,7 +45,22 @@ test_that("nrd_label keep_original appends label columns", {
   expect_identical(out$FEMALE_label, c("Male", "Female"))
 })
 
-test_that("nrd_label translates on lazy duckdb backend", {
+test_that("columns not in the dictionary stay unchanged and warn when explicitly selected", {
+  mock_data <- tibble::tibble(
+    FEMALE = c(0L, 1L),
+    AGE = c(61L, 77L)
+  )
+
+  expect_warning(
+    out <- nrd_label(mock_data, FEMALE, AGE),
+    "no label dictionary"
+  )
+
+  expect_identical(out$AGE, mock_data$AGE)
+  expect_identical(out$FEMALE, c("Male", "Female"))
+})
+
+test_that("nrd_label on a lazy DuckDB table renders CASE WHEN SQL", {
   with_duckdb_connection(function(con) {
     DBI::dbWriteTable(
       con,
@@ -66,7 +81,7 @@ test_that("nrd_label translates on lazy duckdb backend", {
   })
 })
 
-test_that("nrd_label handles float coded values on lazy duckdb backend", {
+test_that("nrd_label on a lazy table handles float-coded values", {
   with_duckdb_connection(function(con) {
     DBI::dbWriteTable(
       con,

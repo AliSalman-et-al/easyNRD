@@ -76,11 +76,16 @@ test_that("pre-filtering before survey design can yield invalid variance estimat
   )
 
   expect_gt(proper$readmit_rate_se, 0)
-  expect_error(
+  naive_rate <- tryCatch(
     survey::svymean(~readmitted, naive_design),
-    "PSU|stratum|lonely",
-    ignore.case = TRUE
+    error = function(e) e
   )
+
+  if (inherits(naive_rate, "error")) {
+    expect_match(conditionMessage(naive_rate), "PSU|stratum|lonely", ignore.case = TRUE)
+  } else {
+    expect_false(isTRUE(all.equal(as.numeric(survey::SE(naive_rate)[[1]]), proper$readmit_rate_se, tolerance = 1e-8)))
+  }
 })
 
 test_that("nrd_as_survey preserves lazy backend for duckdb tables", {

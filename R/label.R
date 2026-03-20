@@ -6,7 +6,7 @@
 #' with `dplyr::case_when()` so they push down to SQL `CASE WHEN` operations
 #' and run out-of-core before materialization.
 #'
-#' @param .data A data frame, lazy table, or Arrow query.
+#' @param data A data frame or lazy table.
 #' @param ... <[`tidy-select`][dplyr::dplyr_tidy_select]> Columns to label.
 #'   If omitted, all columns present in `.data` that have dictionary mappings
 #'   are labeled automatically.
@@ -14,7 +14,7 @@
 #'   selected coded columns. If `TRUE`, keep the original coded columns and
 #'   append labeled columns with the `_label` suffix.
 #'
-#' @returns A modified object of the same backend class as `.data`.
+#' @returns A modified object of the same backend class as `data`.
 #' @export
 #'
 #' @examples
@@ -24,16 +24,16 @@
 #'     nrd_label(FEMALE, PAY1) |>
 #'     nrd_as_survey()
 #' }
-nrd_label <- function(.data, ..., .keep_original = FALSE) {
+nrd_label <- function(data, ..., .keep_original = FALSE) {
   dict_keys <- names(nrd_dict)
   selected_quos <- rlang::enquos(...)
 
   selected_cols <- if (length(selected_quos) == 0) {
-    intersect(colnames(.data), dict_keys)
+    intersect(colnames(data), dict_keys)
   } else {
     requested_cols <- names(tidyselect::eval_select(
       expr = rlang::expr(c(!!!selected_quos)),
-      data = .data
+      data = data
     ))
 
     missing_dict <- setdiff(requested_cols, dict_keys)
@@ -48,7 +48,7 @@ nrd_label <- function(.data, ..., .keep_original = FALSE) {
   }
 
   if (length(selected_cols) == 0) {
-    return(.data)
+    return(data)
   }
 
   mutations <- rlang::list2()
@@ -76,5 +76,5 @@ nrd_label <- function(.data, ..., .keep_original = FALSE) {
     )
   }
 
-  dplyr::mutate(.data, !!!mutations)
+  dplyr::mutate(data, !!!mutations)
 }

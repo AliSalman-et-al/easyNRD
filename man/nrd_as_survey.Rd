@@ -2,61 +2,23 @@
 % Please edit documentation in R/survey.R
 \name{nrd_as_survey}
 \alias{nrd_as_survey}
-\title{Instantiate a Lazy Complex Survey Design for the NRD}
+\title{Wrap NRD data in a survey design}
 \usage{
-nrd_as_survey(.data)
+nrd_as_survey(data)
 }
 \arguments{
-\item{.data}{A data frame, lazy table, or a character path accepted by
-\code{\link[=nrd_ingest]{nrd_ingest()}}.}
+\item{data}{An in-memory data frame or DuckDB-backed lazy table.}
 }
 \value{
-A \code{srvyr::tbl_svy} object configured with NRD survey design variables.
+A \code{srvyr::tbl_svy} object.
 }
 \description{
-\code{nrd_as_survey()} wraps NRD data in an \code{srvyr} survey object so descriptive
-epidemiology can stay out-of-core on Arrow and DuckDB backends.
-}
-\details{
-\code{nrd_as_survey()} supports a dual-track workflow:
-\itemize{
-\item Track 1 (out-of-core descriptive epidemiology): compute weighted summaries
-directly on the database backend using \code{dplyr::group_by()} with \code{srvyr}
-verbs like \code{srvyr::survey_mean()} and \code{srvyr::survey_total()}.
-\item Track 2 (in-memory inferential modeling): for models such as
-\code{survey::svyglm()} or \code{survey::svycoxph()}, first call
-\code{srvyr::filter()} on the survey object to define the analysis domain,
-then call \code{dplyr::collect()} to bring the targeted subset into memory.
-Re-instantiate the in-memory design with \code{survey::svydesign()} before
-fitting model functions from \code{survey}.
-}
+\code{nrd_as_survey()} creates an \code{srvyr} survey object using the NRD design
+variables and a deliberate eager pass to compute degrees of freedom.
 }
 \examples{
-\donttest{
 if (FALSE) {
-  design_lazy <- nrd_ingest("/path/to/linked_output.parquet") |>
-    nrd_as_survey()
-
-  # Domain analysis starts after survey design instantiation.
-  index_domain <- design_lazy |>
-    srvyr::filter(IndexEvent == 1L)
-
-  index_domain |>
-    dplyr::group_by(outcome_status) |>
-    dplyr::summarise(readmit_rate = srvyr::survey_mean(outcome_status == "Readmitted"))
-
-  model_data <- index_domain |>
-    dplyr::collect()
-
-  model_design <- survey::svydesign(
-    ids = ~HOSP_NRD,
-    strata = ~NRD_STRATUM,
-    weights = ~DISCWT,
-    data = model_data,
-    nest = TRUE
-  )
-
-  survey::svyglm(outcome_status == "Readmitted" ~ AGE + FEMALE, design = model_design)
-}
+  data <- nrd_ingest("/path/to/nrd.parquet")
+  design <- nrd_as_survey(data)
 }
 }

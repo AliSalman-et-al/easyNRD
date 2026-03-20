@@ -1,63 +1,24 @@
-#' Instantiate a Lazy Complex Survey Design for the NRD
+#' Wrap NRD data in a survey design
 #'
-#' `nrd_as_survey()` wraps NRD data in an `srvyr` survey object so descriptive
-#' epidemiology can stay out-of-core on Arrow and DuckDB backends.
+#' `nrd_as_survey()` creates an `srvyr` survey object using the NRD design
+#' variables and a deliberate eager pass to compute degrees of freedom.
 #'
-#' @param .data A data frame, lazy table, or a character path accepted by
-#'   [nrd_ingest()].
+#' @param data An in-memory data frame or DuckDB-backed lazy table.
 #'
-#' @returns A `srvyr::tbl_svy` object configured with NRD survey design variables.
-#' @details
-#' `nrd_as_survey()` supports a dual-track workflow:
-#'
-#' - Track 1 (out-of-core descriptive epidemiology): compute weighted summaries
-#'   directly on the database backend using `dplyr::group_by()` with `srvyr`
-#'   verbs like `srvyr::survey_mean()` and `srvyr::survey_total()`.
-#' - Track 2 (in-memory inferential modeling): for models such as
-#'   `survey::svyglm()` or `survey::svycoxph()`, first call
-#'   `srvyr::filter()` on the survey object to define the analysis domain,
-#'   then call `dplyr::collect()` to bring the targeted subset into memory.
-#'   Re-instantiate the in-memory design with `survey::svydesign()` before
-#'   fitting model functions from `survey`.
-#'
+#' @returns A `srvyr::tbl_svy` object.
 #' @export
 #'
 #' @examples
-#' \donttest{
 #' if (FALSE) {
-#'   design_lazy <- nrd_ingest("/path/to/linked_output.parquet") |>
-#'     nrd_as_survey()
-#'
-#'   # Domain analysis starts after survey design instantiation.
-#'   index_domain <- design_lazy |>
-#'     srvyr::filter(IndexEvent == 1L)
-#'
-#'   index_domain |>
-#'     dplyr::group_by(outcome_status) |>
-#'     dplyr::summarise(readmit_rate = srvyr::survey_mean(outcome_status == "Readmitted"))
-#'
-#'   model_data <- index_domain |>
-#'     dplyr::collect()
-#'
-#'   model_design <- survey::svydesign(
-#'     ids = ~HOSP_NRD,
-#'     strata = ~NRD_STRATUM,
-#'     weights = ~DISCWT,
-#'     data = model_data,
-#'     nest = TRUE
-#'   )
-#'
-#'   survey::svyglm(outcome_status == "Readmitted" ~ AGE + FEMALE, design = model_design)
+#'   data <- nrd_ingest("/path/to/nrd.parquet")
+#'   design <- nrd_as_survey(data)
 #' }
-#' }
-nrd_as_survey <- function(.data) {
-  if (is.character(.data)) {
-    .data <- nrd_ingest(.data)
-  }
+nrd_as_survey <- function(data) {
+  .nrd_assert_cols(data, c("HOSP_NRD", "DISCWT", "NRD_STRATUM"))
 
-  .nrd_assert_cols(.data, c("HOSP_NRD", "DISCWT", "NRD_STRATUM"))
-
-  design_degf <- .data |>
+  # This is the one deliberate eager pass needed to compute survey degrees of
+  # freedom from the full design before any domain subsetting.
+  degf <- data |>
     dplyr::summarise(
       .nrd_cluster_n = dplyr::n_distinct(HOSP_NRD),
       .nrd_strata_n = dplyr::n_distinct(NRD_STRATUM)
@@ -66,11 +27,11 @@ nrd_as_survey <- function(.data) {
     dplyr::pull(.nrd_degf)
 
   srvyr::as_survey(
-    .data,
+    data,
     id = HOSP_NRD,
     weights = DISCWT,
     strata = NRD_STRATUM,
     nest = TRUE,
-    degf = design_degf
+    degf = degf
   )
 }

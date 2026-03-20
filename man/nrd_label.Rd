@@ -4,10 +4,10 @@
 \alias{nrd_label}
 \title{Translate HCUP Numeric Codes to Character Labels}
 \usage{
-nrd_label(.data, ..., .keep_original = FALSE)
+nrd_label(data, ..., .keep_original = FALSE)
 }
 \arguments{
-\item{.data}{A data frame, lazy table, or Arrow query.}
+\item{data}{A data frame or lazy table.}
 
 \item{...}{<\code{\link[dplyr:dplyr_tidy_select]{tidy-select}}> Columns to label.
 If omitted, all columns present in \code{.data} that have dictionary mappings
@@ -18,7 +18,7 @@ selected coded columns. If \code{TRUE}, keep the original coded columns and
 append labeled columns with the \verb{_label} suffix.}
 }
 \value{
-A modified object of the same backend class as \code{.data}.
+A modified object of the same backend class as \code{data}.
 }
 \description{
 \code{nrd_label()} translates standard HCUP integer-coded variables into

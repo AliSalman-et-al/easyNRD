@@ -74,3 +74,25 @@ test_that("nrd_factorize prioritizes _label columns from nrd_label keep_original
   expect_identical(levels(out$FEMALE_label), unname(dict$FEMALE))
   expect_identical(as.character(out$FEMALE_label), c("Male", "Female", "Male"))
 })
+
+test_that("nrd_factorize errors clearly on lazy tables", {
+  path <- make_synthetic_nrd(tibble::tibble(
+    YEAR = 2019L,
+    NRD_VisitLink = "A001",
+    KEY_NRD = 1L,
+    NRD_DaysToEvent = 5L,
+    LOS = 2L,
+    DMONTH = 1L,
+    DIED = 0L,
+    FEMALE = 1L
+  ))
+  on.exit(unlink(path), add = TRUE)
+
+  lazy <- nrd_ingest(path)
+  on.exit(nrd_close(lazy), add = TRUE)
+
+  expect_error(
+    nrd_factorize(lazy),
+    "in-memory|collect"
+  )
+})

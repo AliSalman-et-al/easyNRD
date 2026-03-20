@@ -4,10 +4,10 @@
 \alias{nrd_factorize}
 \title{Convert Labeled NRD Variables to Ordered Factors}
 \usage{
-nrd_factorize(.data)
+nrd_factorize(data)
 }
 \arguments{
-\item{.data}{A local in-memory \code{data.frame}/tibble or \code{tbl_svy} object.}
+\item{data}{A local in-memory \code{data.frame}/tibble or \code{tbl_svy} object.}
 }
 \value{
 The input object with dictionary-backed columns converted to factors.
