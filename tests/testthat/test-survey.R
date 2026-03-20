@@ -1,5 +1,5 @@
 test_that("nrd_as_survey maps HCUP survey design variables", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     HOSP_NRD = c(201L, 202L, 203L, 204L),
     DISCWT = c(0.7, 1.1, 2.4, 0.8),
     NRD_STRATUM = c(21L, 21L, 22L, 22L),
@@ -19,7 +19,7 @@ test_that("nrd_as_survey maps HCUP survey design variables", {
 })
 
 test_that("domain estimates from nrd_as_survey agree with survey::subset workflow", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     HOSP_NRD = c(101L, 101L, 102L, 102L, 103L, 103L),
     NRD_STRATUM = c(1L, 1L, 1L, 1L, 2L, 2L),
     DISCWT = c(2.0, 1.0, 1.5, 1.0, 3.0, 0.5),
@@ -50,7 +50,7 @@ test_that("domain estimates from nrd_as_survey agree with survey::subset workflo
 })
 
 test_that("pre-filtering before survey design can yield invalid variance estimation", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     HOSP_NRD = c(501L, 501L, 502L, 502L, 503L, 503L, 504L, 504L),
     NRD_STRATUM = c(10L, 10L, 10L, 10L, 20L, 20L, 20L, 20L),
     DISCWT = c(1.0, 2.5, 0.8, 1.8, 3.0, 0.7, 1.3, 2.1),
@@ -93,7 +93,7 @@ test_that("nrd_as_survey preserves lazy backend for duckdb tables", {
     DBI::dbWriteTable(
       con,
       "nrd_mock",
-      tibble::tibble(
+      dplyr::tibble(
         HOSP_NRD = c(301L, 302L),
         DISCWT = c(1.0, 1.8),
         NRD_STRATUM = c(31L, 31L),

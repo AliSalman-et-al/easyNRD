@@ -19,7 +19,7 @@ stable reference categories for downstream modeling workflows such as
 \code{survival} and \code{gtsummary}.
 }
 \examples{
-dat <- tibble::tibble(
+dat <- dplyr::tibble(
   FEMALE = c("Male", "Female"),
   PAY1 = c("Medicare", "Private"),
   AGE = c(65, 72)

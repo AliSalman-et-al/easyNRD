@@ -11,7 +11,7 @@ test_that("single parquet path ingests to a DuckDB-backed lazy table", {
 })
 
 test_that("multiple parquet paths unify schemas correctly", {
-  path_a <- make_synthetic_nrd(tibble::tibble(
+  path_a <- make_synthetic_nrd(dplyr::tibble(
     YEAR = 2019L,
     NRD_VisitLink = "A001",
     KEY_NRD = 1001L,
@@ -24,7 +24,7 @@ test_that("multiple parquet paths unify schemas correctly", {
     DIED = 0L,
     I10_DX1 = "I2101"
   ))
-  path_b <- make_synthetic_nrd(tibble::tibble(
+  path_b <- make_synthetic_nrd(dplyr::tibble(
     YEAR = 2019L,
     NRD_VisitLink = "A002",
     KEY_NRD = 1002L,
@@ -53,7 +53,7 @@ test_that("multiple parquet paths unify schemas correctly", {
 })
 
 test_that("NRD_VisitLink is renamed to NRD_VISITLINK", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = 2019L,
     NRD_VisitLink = "A001",
     KEY_NRD = 1001L,
@@ -75,7 +75,7 @@ test_that("NRD_VisitLink is renamed to NRD_VISITLINK", {
 })
 
 test_that("NRD_DaysToEvent is renamed to NRD_DAYSTOEVENT", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = 2019L,
     NRD_VisitLink = "A001",
     KEY_NRD = 1001L,

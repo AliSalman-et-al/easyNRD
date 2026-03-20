@@ -1,5 +1,5 @@
 test_that("Discharge_Day equals NRD_DAYSTOEVENT plus LOS for known values", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VisitLink = c("A001", "A002"),
     KEY_NRD = c(1001L, 1002L),
@@ -22,7 +22,7 @@ test_that("Discharge_Day equals NRD_DAYSTOEVENT plus LOS for known values", {
 })
 
 test_that("missing required columns produce a clear error naming the missing column", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = 2019L,
     NRD_VisitLink = "A001",
     KEY_NRD = 1001L,
@@ -98,7 +98,7 @@ test_that("nrd_prepare returns a lazy DuckDB table and does not collect", {
 })
 
 test_that("Discharge_Day is NA when LOS is NA", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VisitLink = c("A001", "A002"),
     KEY_NRD = c(1001L, 1002L),

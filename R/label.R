@@ -8,8 +8,8 @@
 #'
 #' @param data A data frame or lazy table.
 #' @param ... <[`tidy-select`][dplyr::dplyr_tidy_select]> Columns to label.
-#'   If omitted, all columns present in `.data` that have dictionary mappings
-#'   are labeled automatically.
+#'   If omitted, all columns present in `data` that have dictionary mappings are
+#'   labeled automatically.
 #' @param .keep_original Logical scalar. If `FALSE` (default), overwrite the
 #'   selected coded columns. If `TRUE`, keep the original coded columns and
 #'   append labeled columns with the `_label` suffix.

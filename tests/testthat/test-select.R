@@ -1,7 +1,7 @@
 test_that("nrd_select errors when YEAR, NRD_VISITLINK, or KEY_NRD is absent", {
-  missing_year <- tibble::tibble(NRD_VISITLINK = "A001", KEY_NRD = 1L)
-  missing_visitlink <- tibble::tibble(YEAR = 2019L, KEY_NRD = 1L)
-  missing_key <- tibble::tibble(YEAR = 2019L, NRD_VISITLINK = "A001")
+  missing_year <- dplyr::tibble(NRD_VISITLINK = "A001", KEY_NRD = 1L)
+  missing_visitlink <- dplyr::tibble(YEAR = 2019L, KEY_NRD = 1L)
+  missing_key <- dplyr::tibble(YEAR = 2019L, NRD_VISITLINK = "A001")
 
   expect_error(nrd_select(missing_year), "YEAR")
   expect_error(nrd_select(missing_visitlink), "NRD_VISITLINK")
@@ -9,7 +9,7 @@ test_that("nrd_select errors when YEAR, NRD_VISITLINK, or KEY_NRD is absent", {
 })
 
 test_that("nrd_select omits missing survey-design columns without error", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = 2019L,
     NRD_VISITLINK = "A0001",
     KEY_NRD = 1L,
@@ -21,7 +21,7 @@ test_that("nrd_select omits missing survey-design columns without error", {
 })
 
 test_that("nrd_select omits missing linkage-derived columns without error", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = 2019L,
     NRD_VISITLINK = "A0001",
     KEY_NRD = 1L,
@@ -33,7 +33,7 @@ test_that("nrd_select omits missing linkage-derived columns without error", {
 })
 
 test_that("user-selected columns are appended after retained columns", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = 2019L,
     NRD_VISITLINK = "A0001",
     KEY_NRD = 1L,
@@ -64,7 +64,7 @@ test_that("user-selected columns are appended after retained columns", {
 })
 
 test_that("nrd_demographics and nrd_hospital_vars work as helpers inside nrd_select", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = 2019L,
     NRD_VISITLINK = "A0001",
     KEY_NRD = 1L,
@@ -87,7 +87,7 @@ test_that("nrd_demographics and nrd_hospital_vars work as helpers inside nrd_sel
 })
 
 test_that("nrd_select works on both lazy DuckDB tables and in-memory data frames", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = 2019L,
     NRD_VISITLINK = "A0001",
     KEY_NRD = 1L,

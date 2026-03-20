@@ -1,5 +1,5 @@
 test_that("default call labels all dictionary columns and overwrites originals", {
-  mock_data <- tibble::tibble(
+  mock_data <- dplyr::tibble(
     FEMALE = c(0L, 1L, 1L),
     PAY1 = c(1L, 3L, 6L),
     AGE = c(65L, 70L, 58L)
@@ -16,7 +16,7 @@ test_that("default call labels all dictionary columns and overwrites originals",
 })
 
 test_that("explicit column selection labels only the named columns", {
-  mock_data <- tibble::tibble(
+  mock_data <- dplyr::tibble(
     FEMALE = c(0L, 1L),
     PAY1 = c(2L, 4L),
     AGE = c(62L, 74L)
@@ -31,7 +31,7 @@ test_that("explicit column selection labels only the named columns", {
 })
 
 test_that("keep_original preserves coded columns and appends label columns", {
-  mock_data <- tibble::tibble(
+  mock_data <- dplyr::tibble(
     FEMALE = c(0L, 1L),
     PAY1 = c(1L, 5L),
     AGE = c(61L, 77L)
@@ -46,7 +46,7 @@ test_that("keep_original preserves coded columns and appends label columns", {
 })
 
 test_that("columns not in the dictionary stay unchanged and warn when explicitly selected", {
-  mock_data <- tibble::tibble(
+  mock_data <- dplyr::tibble(
     FEMALE = c(0L, 1L),
     AGE = c(61L, 77L)
   )
@@ -65,7 +65,7 @@ test_that("nrd_label on a lazy DuckDB table renders CASE WHEN SQL", {
     DBI::dbWriteTable(
       con,
       "label_mock",
-      tibble::tibble(
+      dplyr::tibble(
         FEMALE = c(0L, 1L),
         PAY1 = c(1L, 3L),
         AGE = c(60L, 70L)
@@ -86,7 +86,7 @@ test_that("nrd_label on a lazy table handles float-coded values", {
     DBI::dbWriteTable(
       con,
       "label_mock_float",
-      tibble::tibble(
+      dplyr::tibble(
         FEMALE = c(0.0, 1.0, 9.0),
         PAY1 = c(1.0, 3.0, 8.0),
         AGE = c(60, 70, 80)

@@ -10,8 +10,8 @@ nrd_label(data, ..., .keep_original = FALSE)
 \item{data}{A data frame or lazy table.}
 
 \item{...}{<\code{\link[dplyr:dplyr_tidy_select]{tidy-select}}> Columns to label.
-If omitted, all columns present in \code{.data} that have dictionary mappings
-are labeled automatically.}
+If omitted, all columns present in \code{data} that have dictionary mappings are
+labeled automatically.}
 
 \item{.keep_original}{Logical scalar. If \code{FALSE} (default), overwrite the
 selected coded columns. If \code{TRUE}, keep the original coded columns and

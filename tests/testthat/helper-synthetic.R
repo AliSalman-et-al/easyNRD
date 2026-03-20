@@ -1,7 +1,7 @@
 # Write a small NRD-shaped parquet fixture so tests exercise real ingest.
 make_synthetic_nrd <- function(data = NULL) {
   if (is.null(data)) {
-    data <- tibble::tibble(
+    data <- dplyr::tibble(
       YEAR = c(2019L, 2019L, 2019L, 2020L),
       NRD_VISITLINK = c("A001", "A001", "B001", "A001"),
       KEY_NRD = c(1001L, 1002L, 1003L, 2001L),

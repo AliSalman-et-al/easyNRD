@@ -1,5 +1,5 @@
 test_that("pattern mode returns TRUE for matching rows and FALSE otherwise", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VisitLink = c("A001", "A002"),
     KEY_NRD = c(1L, 2L),
@@ -22,7 +22,7 @@ test_that("pattern mode returns TRUE for matching rows and FALSE otherwise", {
 })
 
 test_that("pattern mode principal scope matches only principal columns", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VisitLink = c("A001", "A002"),
     KEY_NRD = c(1L, 2L),
@@ -46,7 +46,7 @@ test_that("pattern mode principal scope matches only principal columns", {
 })
 
 test_that("pattern mode secondary scope matches only secondary columns", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VisitLink = c("A001", "A002"),
     KEY_NRD = c(1L, 2L),
@@ -70,7 +70,7 @@ test_that("pattern mode secondary scope matches only secondary columns", {
 })
 
 test_that("pattern mode all scope matches across the full column array", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = c(2019L, 2019L, 2019L),
     NRD_VisitLink = c("A001", "A002", "A003"),
     KEY_NRD = c(1L, 2L, 3L),
@@ -94,7 +94,7 @@ test_that("pattern mode all scope matches across the full column array", {
 })
 
 test_that("codes mode returns TRUE for exact matches and FALSE otherwise", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VisitLink = c("A001", "A002"),
     KEY_NRD = c(1L, 2L),
@@ -117,7 +117,7 @@ test_that("codes mode returns TRUE for exact matches and FALSE otherwise", {
 })
 
 test_that("codes mode all scope matches across multiple columns", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = c(2019L, 2019L, 2019L),
     NRD_VisitLink = c("A001", "A002", "A003"),
     KEY_NRD = c(1L, 2L, 3L),
@@ -141,7 +141,7 @@ test_that("codes mode all scope matches across multiple columns", {
 })
 
 test_that("rows with all clinical columns NA produce FALSE", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VisitLink = c("A001", "A002"),
     KEY_NRD = c(1L, 2L),

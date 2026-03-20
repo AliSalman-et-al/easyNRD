@@ -1,5 +1,5 @@
 test_that("nrd_factorize converts dictionary columns to ordered factors", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     FEMALE = c("Female", "Male", NA_character_),
     PAY1 = c("Private", "Medicare", "Other"),
     AGE = c(55L, 62L, 71L)
@@ -16,7 +16,7 @@ test_that("nrd_factorize converts dictionary columns to ordered factors", {
 })
 
 test_that("nrd_factorize ignores columns not in dictionary", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     AGE = c(45L, 50L),
     is_ami = c(1L, 0L)
   )
@@ -27,7 +27,7 @@ test_that("nrd_factorize ignores columns not in dictionary", {
 })
 
 test_that("nrd_factorize handles all-NA dictionary columns", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     FEMALE = c(NA_character_, NA_character_),
     AGE = c(40L, 41L)
   )
@@ -41,7 +41,7 @@ test_that("nrd_factorize handles all-NA dictionary columns", {
 })
 
 test_that("nrd_factorize works with in-memory tbl_svy", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     HOSP_NRD = c(101L, 102L),
     DISCWT = c(1.5, 2.0),
     NRD_STRATUM = c(11L, 11L),
@@ -59,7 +59,7 @@ test_that("nrd_factorize works with in-memory tbl_svy", {
 })
 
 test_that("nrd_factorize prioritizes _label columns from nrd_label keep_original", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     FEMALE = c(0L, 1L, 0L),
     PAY1 = c(1L, 3L, 6L),
     AGE = c(50L, 63L, 77L)
@@ -76,7 +76,7 @@ test_that("nrd_factorize prioritizes _label columns from nrd_label keep_original
 })
 
 test_that("nrd_factorize errors clearly on lazy tables", {
-  path <- make_synthetic_nrd(tibble::tibble(
+  path <- make_synthetic_nrd(dplyr::tibble(
     YEAR = 2019L,
     NRD_VisitLink = "A001",
     KEY_NRD = 1L,

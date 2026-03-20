@@ -1,5 +1,5 @@
 test_that("denominator is preserved and year scope is respected", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2020L),
     NRD_VISITLINK = c("A001", "A001"),
     KEY_NRD = c(101L, 201L),
@@ -31,7 +31,7 @@ test_that("denominator is preserved and year scope is respected", {
 })
 
 test_that("time_to_event uses the exact HCUP gap formula", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VISITLINK = c("A001", "A001"),
     KEY_NRD = c(101L, 102L),
@@ -65,7 +65,7 @@ test_that("time_to_event uses the exact HCUP gap formula", {
 })
 
 test_that("only the first qualifying readmission is linked", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L, 2019L),
     NRD_VISITLINK = c("A001", "A001", "A001"),
     KEY_NRD = c(101L, 102L, 103L),
@@ -100,7 +100,7 @@ test_that("only the first qualifying readmission is linked", {
 })
 
 test_that("tie-breaking falls through to smaller KEY_NRD when gap and day tie", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L, 2019L),
     NRD_VISITLINK = c("A001", "A001", "A001"),
     KEY_NRD = c(101L, 102L, 103L),
@@ -134,7 +134,7 @@ test_that("tie-breaking falls through to smaller KEY_NRD when gap and day tie", 
 })
 
 test_that("index censoring uses the DMONTH threshold", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VISITLINK = c("A001", "A002"),
     KEY_NRD = c(101L, 102L),
@@ -165,7 +165,7 @@ test_that("index censoring uses the DMONTH threshold", {
 })
 
 test_that("death at index is excluded and labeled correctly", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VISITLINK = c("A001", "A002"),
     KEY_NRD = c(101L, 102L),
@@ -198,7 +198,7 @@ test_that("death at index is excluded and labeled correctly", {
 })
 
 test_that("non-index rows have NA outcomes and censored rows have non-missing time", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VISITLINK = c("A001", "A002"),
     KEY_NRD = c(101L, 102L),
@@ -234,7 +234,7 @@ test_that("non-index rows have NA outcomes and censored rows have non-missing ti
 })
 
 test_that("readmit_vars are prefixed and remain NA for non-readmitted rows", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L, 2019L),
     NRD_VISITLINK = c("A001", "A001", "B001"),
     KEY_NRD = c(101L, 102L, 201L),
@@ -270,7 +270,7 @@ test_that("readmit_vars are prefixed and remain NA for non-readmitted rows", {
 })
 
 test_that("readmissions can become later index events", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L, 2019L),
     NRD_VISITLINK = c("A001", "A001", "A001"),
     KEY_NRD = c(101L, 102L, 103L),
@@ -304,7 +304,7 @@ test_that("readmissions can become later index events", {
 })
 
 test_that("nrd_link_readmissions stays lazy and uses a DuckDB compute checkpoint", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VISITLINK = c("A001", "A001"),
     KEY_NRD = c(101L, 102L),
@@ -350,7 +350,7 @@ test_that("nrd_link_readmissions stays lazy and uses a DuckDB compute checkpoint
 })
 
 test_that("final SQL snapshot is stable", {
-  dat <- tibble::tibble(
+  dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L),
     NRD_VISITLINK = c("A001", "A001"),
     KEY_NRD = c(101L, 102L),

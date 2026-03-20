@@ -33,8 +33,3 @@
 
   invisible(data)
 }
-
-# Preserve the legacy internal helper name during the rewrite.
-.nrd_assert_lazy_duckdb <- function(data, arg = "data") {
-  .nrd_assert_duckdb_lazy(data, arg = arg)
-}

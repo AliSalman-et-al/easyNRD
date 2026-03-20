@@ -11,7 +11,7 @@
 #' @export
 #'
 #' @examples
-#' dat <- tibble::tibble(
+#' dat <- dplyr::tibble(
 #'   FEMALE = c("Male", "Female"),
 #'   PAY1 = c("Medicare", "Private"),
 #'   AGE = c(65, 72)

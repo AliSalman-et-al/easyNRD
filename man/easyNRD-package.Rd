@@ -4,10 +4,11 @@
 \name{easyNRD-package}
 \alias{easyNRD}
 \alias{easyNRD-package}
-\title{easyNRD: Tools for HCUP-NRD Workflows}
+\title{easyNRD: Discharge-level tools for HCUP-NRD workflows}
 \description{
-Provides lazy, SQL-translatable tools for NRD ingestion, episode
-consolidation, readmission linkage, export, and survey design preparation.
+Provides lazy, SQL-translatable tools for discharge-level NRD ingestion,
+condition flagging, readmission linkage, export, and survey design
+preparation.
 }
 \seealso{
 Useful links:
