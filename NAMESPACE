@@ -3,6 +3,7 @@
 export(nrd_as_survey)
 export(nrd_cache_dir)
 export(nrd_cleanup)
+export(nrd_close)
 export(nrd_demographics)
 export(nrd_export)
 export(nrd_factorize)

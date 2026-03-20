@@ -2,33 +2,25 @@
 % Please edit documentation in R/export.R
 \name{nrd_export}
 \alias{nrd_export}
-\title{Materialize and Export an NRD Pipeline}
+\title{Export a lazy NRD table to parquet}
 \usage{
-nrd_export(.data, path, row_group_size = 250000L)
+nrd_export(data, path)
 }
 \arguments{
-\item{.data}{A DuckDB-backed lazy table produced by the easyNRD pipeline.}
+\item{data}{A DuckDB-backed lazy table.}
 
-\item{path}{Output parquet file path.}
-
-\item{row_group_size}{Target parquet row-group size used during DuckDB
-materialization. Smaller groups reduce peak memory pressure for wide NRD
-extracts. Defaults to \code{250000L}.}
+\item{path}{Output parquet path.}
 }
 \value{
-The output \code{path}, invisibly.
+Invisibly returns \code{path}.
 }
 \description{
-\code{nrd_export()} writes a processed NRD pipeline to a compressed parquet file.
-For lazy DuckDB tables, the write is executed directly by DuckDB to preserve
-out-of-core behavior.
+\code{nrd_export()} writes a DuckDB-backed lazy table to a parquet file using
+DuckDB \code{COPY}.
 }
 \examples{
-\donttest{
 if (FALSE) {
-  nrd_ingest("/path/to/nrd.parquet") |>
-    nrd_build_episodes() |>
-    nrd_export("/path/to/episodes.parquet", row_group_size = 250000L)
-}
+  data <- nrd_ingest("/path/to/file.parquet")
+  nrd_export(data, "/path/to/out.parquet")
 }
 }

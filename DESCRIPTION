@@ -19,20 +19,20 @@ Depends:
     R (>= 4.2.0)
 Imports:
     arrow,
-    cli,
     DBI,
     dbplyr (>= 2.4.0),
     dplyr,
     duckdb,
     rlang,
     srvyr,
-    stringr,
     tibble,
-    tidyr,
     tidyselect
 Suggests:
+    knitr,
+    rmarkdown,
     survey,
     testthat (>= 3.0.0)
+VignetteBuilder: knitr
 Config/testthat/edition: 3
 URL: https://github.com/AliSalman-et-al/easyNRD
 BugReports: https://github.com/AliSalman-et-al/easyNRD/issues

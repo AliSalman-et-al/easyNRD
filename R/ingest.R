@@ -1,107 +1,53 @@
-#' Ingest NRD Parquet Files Lazily
+#' Ingest NRD parquet files lazily
 #'
-#' `nrd_ingest()` initializes a lazy NRD table from one or more parquet files.
-#' The function standardizes common HCUP name variants and keeps data out-of-core
-#' for downstream pipeline steps.
+#' `nrd_ingest()` creates or reuses a DuckDB-backed lazy table without pulling
+#' data into memory.
 #'
-#' @param datasets Character vector of parquet file paths, an Arrow dataset,
-#'   an Arrow query, or an existing DuckDB-backed lazy table.
+#' @param paths A character vector of `.parquet` paths, an Arrow dataset or
+#'   query, or an existing DuckDB-backed lazy table.
 #'
-#' @returns A lazy table, typically `tbl_dbi` backed by DuckDB.
-#' @family pipeline functions
+#' @returns A DuckDB-backed `tbl_lazy`.
 #' @export
 #'
 #' @examples
-#' \donttest{
 #' if (FALSE) {
-#'   raw_nrd <- nrd_ingest(c(
-#'     "/path/to/NRD_2019_CORE.parquet",
-#'     "/path/to/NRD_2020_CORE.parquet"
-#'   ))
+#'   data <- nrd_ingest(c("/path/to/nrd_2019.parquet", "/path/to/nrd_2020.parquet"))
 #' }
-#' }
-nrd_ingest <- function(datasets) {
-  created_connection <- FALSE
-  owner_registered <- FALSE
-  existing_nrd_env <- NULL
-  session_temp_dir <- NULL
-  con <- NULL
+nrd_ingest <- function(paths) {
+  cleanup_needed <- TRUE
+
+  if (inherits(paths, "tbl_lazy")) {
+    .nrd_assert_duckdb_lazy(paths, arg = "paths")
+    return(paths)
+  }
+
+  if (inherits(paths, c("Dataset", "ArrowTabular", "arrow_dplyr_query"))) {
+    dataset <- paths
+  } else {
+    if (!is.character(paths) || length(paths) == 0) {
+      rlang::abort("`paths` must be a non-empty character vector of `.parquet` files.")
+    }
+
+    dataset <- arrow::open_dataset(paths, format = "parquet", unify_schemas = TRUE)
+  }
+
+  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  temp_dir <- .nrd_configure_connection(con)
+  owner <- .nrd_make_owner(con, temp_dir)
 
   on.exit(
     {
-      if (isTRUE(created_connection) && !isTRUE(owner_registered)) {
-        try(
-          {
-            if (!is.null(con) && isTRUE(tryCatch(DBI::dbIsValid(con), error = function(e) FALSE))) {
-              DBI::dbDisconnect(con, shutdown = TRUE)
-            }
-          },
-          silent = TRUE
-        )
-
-        if (is.character(session_temp_dir) && length(session_temp_dir) == 1 &&
-          nzchar(session_temp_dir) && dir.exists(session_temp_dir)) {
-          try(unlink(session_temp_dir, recursive = TRUE, force = TRUE), silent = TRUE)
-        }
+      if (isTRUE(cleanup_needed) && !isTRUE(owner$closed)) {
+        try(nrd_close(owner), silent = TRUE)
       }
     },
     add = TRUE
   )
 
-  resolve_session_temp_dir <- function(con) {
-    from_attr <- attr(con, "nrd_session_temp_dir", exact = TRUE)
-    if (is.character(from_attr) && length(from_attr) == 1 && nzchar(from_attr)) {
-      return(from_attr)
-    }
+  data <- arrow::to_duckdb(dataset, con = con)
+  data <- .nrd_standardize_names(data)
+  data <- .nrd_attach_owner(data, owner)
 
-    tryCatch(
-      DBI::dbGetQuery(
-        con,
-        "SELECT current_setting('temp_directory') AS temp_directory"
-      )$temp_directory[[1]],
-      error = function(e) NULL
-    )
-  }
-
-  tbl <- if (inherits(datasets, "tbl_lazy")) {
-    .nrd_assert_lazy_duckdb(datasets, arg = "datasets")
-    existing_nrd_env <- .nrd_get_owner(datasets)
-    datasets
-  } else if (inherits(datasets, "ArrowTabular") ||
-    inherits(datasets, "arrow_dplyr_query")) {
-    con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
-    nrd_configure_engine(con, temp_directory = nrd_cache_dir())
-    session_temp_dir <- resolve_session_temp_dir(con)
-    created_connection <- TRUE
-    arrow::to_duckdb(datasets, con = con)
-  } else {
-    if (!is.character(datasets) || length(datasets) == 0) {
-      rlang::abort("`datasets` must be a non-empty character vector of parquet paths.")
-    }
-
-    con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
-    nrd_configure_engine(con, temp_directory = nrd_cache_dir())
-    session_temp_dir <- resolve_session_temp_dir(con)
-    created_connection <- TRUE
-    arrow::open_dataset(datasets, unify_schemas = TRUE, format = "parquet") |>
-      arrow::to_duckdb(con = con)
-  }
-
-  .nrd_assert_lazy_duckdb(tbl, arg = "datasets")
-  lazy_tbl <- .nrd_standardize_names(tbl)
-
-  if (isTRUE(created_connection)) {
-    nrd_env <- .nrd_make_owner(
-      con = con,
-      session_temp_dir = session_temp_dir
-    )
-    owner_registered <- TRUE
-    return(.nrd_attach_owner(lazy_tbl, nrd_env))
-  }
-
-  if (!is.null(existing_nrd_env)) {
-    lazy_tbl <- .nrd_attach_owner(lazy_tbl, existing_nrd_env)
-  }
-
-  lazy_tbl
+  cleanup_needed <- FALSE
+  data
 }

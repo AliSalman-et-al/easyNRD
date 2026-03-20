@@ -12,7 +12,7 @@ test_that("nrd_cleanup removes orphaned easyNRD directories", {
   dir.create(keep_dir)
 
   removed <- testthat::with_mocked_bindings(
-    nrd_cleanup(temp_directory = tmp, force = FALSE),
+    nrd_cleanup(path = tmp, force = FALSE),
     .nrd_pid_is_alive = function(pid) {
       if (pid == 111111L) {
         return(FALSE)
@@ -41,7 +41,7 @@ test_that("nrd_cleanup force mode removes all easyNRD directories", {
   dir.create(dir_b)
   dir.create(keep_dir)
 
-  removed <- nrd_cleanup(temp_directory = tmp, force = TRUE)
+  removed <- nrd_cleanup(path = tmp, force = TRUE)
 
   expect_identical(removed, 2L)
   expect_false(dir.exists(dir_a))

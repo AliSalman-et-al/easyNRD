@@ -2,39 +2,23 @@
 % Please edit documentation in R/ingest.R
 \name{nrd_ingest}
 \alias{nrd_ingest}
-\title{Ingest NRD Parquet Files Lazily}
+\title{Ingest NRD parquet files lazily}
 \usage{
-nrd_ingest(datasets)
+nrd_ingest(paths)
 }
 \arguments{
-\item{datasets}{Character vector of parquet file paths, an Arrow dataset,
-an Arrow query, or an existing DuckDB-backed lazy table.}
+\item{paths}{A character vector of \code{.parquet} paths, an Arrow dataset or
+query, or an existing DuckDB-backed lazy table.}
 }
 \value{
-A lazy table, typically \code{tbl_dbi} backed by DuckDB.
+A DuckDB-backed \code{tbl_lazy}.
 }
 \description{
-\code{nrd_ingest()} initializes a lazy NRD table from one or more parquet files.
-The function standardizes common HCUP name variants and keeps data out-of-core
-for downstream pipeline steps.
+\code{nrd_ingest()} creates or reuses a DuckDB-backed lazy table without pulling
+data into memory.
 }
 \examples{
-\donttest{
 if (FALSE) {
-  raw_nrd <- nrd_ingest(c(
-    "/path/to/NRD_2019_CORE.parquet",
-    "/path/to/NRD_2020_CORE.parquet"
-  ))
+  data <- nrd_ingest(c("/path/to/nrd_2019.parquet", "/path/to/nrd_2020.parquet"))
 }
 }
-}
-\seealso{
-Other pipeline functions: 
-\code{\link{nrd_build_episodes}()},
-\code{\link{nrd_cleanup}()},
-\code{\link{nrd_close}()},
-\code{\link{nrd_connection_info}()},
-\code{\link{nrd_link_readmissions}()},
-\code{\link{nrd_materialize}()}
-}
-\concept{pipeline functions}

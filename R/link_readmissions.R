@@ -4,7 +4,7 @@
 #' subsequent admission within a readmission window while preserving the complete
 #' denominator.
 #'
-#' @param .data Episode-level lazy table from [nrd_build_episodes()].
+#' @param .data Episode-level lazy table.
 #' @param index_condition Unquoted logical expression that defines index events.
 #' @param readmit_condition Unquoted logical expression that defines qualifying
 #'   readmission events.
@@ -26,13 +26,13 @@
 #' @returns A denominator-preserving lazy table with readmission linkage,
 #'   `time_to_event`, and `outcome_status`.
 #' @details
-#' Step 3 of the core `easyNRD` pipeline. Under `censor_method = "drop_month"`,
+#' Step 3 of the legacy prototype pipeline. Under `censor_method = "drop_month"`,
 #' late-year discharges that cannot guarantee full follow-up are retained in the
 #' data but converted to `IndexEvent = 0L`, so they remain eligible as
 #' readmission candidates for earlier index episodes. For standard readmission
 #' analyses aligned to HCUP recommendations, include
 #' `Episode_SAMEDAYEVENT == 0L` in `index_condition` when that field is
-#' available from [nrd_build_episodes()].
+#' available from an upstream episode-building step.
 #'
 #' For standard readmission
 #' rate denominators, exclude index stays with `outcome_status == "Died at
@@ -47,9 +47,8 @@
 #' @examples
 #' \donttest{
 #' if (FALSE) {
-#'   linked <- nrd_ingest("/path/to/nrd.parquet") |>
-#'     nrd_build_episodes() |>
-#'     nrd_link_readmissions(
+#'   linked <- nrd_link_readmissions(
+#'     nrd_ingest("/path/to/nrd.parquet"),
 #'       index_condition = Episode_DX10_Principal == "I214" & Episode_SAMEDAYEVENT == 0L,
 #'       readmit_condition = DIED == 0L,
 #'       window = 30L,
