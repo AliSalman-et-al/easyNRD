@@ -22,8 +22,31 @@
 #' }
 nrd_ingest <- function(datasets) {
   created_connection <- FALSE
+  owner_registered <- FALSE
   existing_nrd_env <- NULL
   session_temp_dir <- NULL
+  con <- NULL
+
+  on.exit(
+    {
+      if (isTRUE(created_connection) && !isTRUE(owner_registered)) {
+        try(
+          {
+            if (!is.null(con) && isTRUE(tryCatch(DBI::dbIsValid(con), error = function(e) FALSE))) {
+              DBI::dbDisconnect(con, shutdown = TRUE)
+            }
+          },
+          silent = TRUE
+        )
+
+        if (is.character(session_temp_dir) && length(session_temp_dir) == 1 &&
+          nzchar(session_temp_dir) && dir.exists(session_temp_dir)) {
+          try(unlink(session_temp_dir, recursive = TRUE, force = TRUE), silent = TRUE)
+        }
+      }
+    },
+    add = TRUE
+  )
 
   resolve_session_temp_dir <- function(con) {
     from_attr <- attr(con, "nrd_session_temp_dir", exact = TRUE)
@@ -42,7 +65,7 @@ nrd_ingest <- function(datasets) {
 
   tbl <- if (inherits(datasets, "tbl_lazy")) {
     .nrd_assert_lazy_duckdb(datasets, arg = "datasets")
-    existing_nrd_env <- attr(datasets, "nrd_env", exact = TRUE)
+    existing_nrd_env <- .nrd_get_owner(datasets)
     datasets
   } else if (inherits(datasets, "ArrowTabular") ||
     inherits(datasets, "arrow_dplyr_query")) {
@@ -68,42 +91,16 @@ nrd_ingest <- function(datasets) {
   lazy_tbl <- .nrd_standardize_names(tbl)
 
   if (isTRUE(created_connection)) {
-    nrd_env <- new.env(parent = emptyenv())
-    nrd_env$con <- con
-    nrd_env$session_temp_dir <- session_temp_dir
-
-    reg.finalizer(
-      nrd_env,
-      function(e) {
-        tryCatch(
-          {
-            if (!is.null(e$con) && DBI::dbIsValid(e$con)) {
-              DBI::dbDisconnect(e$con, shutdown = TRUE)
-            }
-          },
-          error = function(err) NULL
-        )
-
-        tryCatch(
-          {
-            if (!is.null(e$session_temp_dir) && dir.exists(e$session_temp_dir)) {
-              unlink(e$session_temp_dir, recursive = TRUE, force = TRUE)
-            }
-          },
-          error = function(err) NULL
-        )
-
-        invisible(NULL)
-      },
-      onexit = TRUE
+    nrd_env <- .nrd_make_owner(
+      con = con,
+      session_temp_dir = session_temp_dir
     )
-
-    attr(lazy_tbl, "nrd_env") <- nrd_env
-    return(lazy_tbl)
+    owner_registered <- TRUE
+    return(.nrd_attach_owner(lazy_tbl, nrd_env))
   }
 
   if (!is.null(existing_nrd_env)) {
-    attr(lazy_tbl, "nrd_env") <- existing_nrd_env
+    lazy_tbl <- .nrd_attach_owner(lazy_tbl, existing_nrd_env)
   }
 
   lazy_tbl

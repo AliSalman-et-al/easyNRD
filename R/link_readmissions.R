@@ -87,39 +87,20 @@ nrd_link_readmissions <- function(
   idx_quo <- rlang::enquo(index_condition)
   readm_quo <- rlang::enquo(readmit_condition)
 
-  month_ends_non_leap <- c(31L, 59L, 90L, 120L, 151L, 181L, 212L, 243L, 273L, 304L, 334L, 365L)
-  month_ends_leap <- c(31L, 60L, 91L, 121L, 152L, 182L, 213L, 244L, 274L, 305L, 335L, 366L)
-
-  max_month_for_window <- function(month_ends, year_days, window_days) {
-    allowable <- which(month_ends <= (year_days - window_days))
-    if (length(allowable) == 0) 0L else as.integer(max(allowable))
-  }
-
-  last_allowable_month_non_leap <- max_month_for_window(month_ends_non_leap, 365L, window)
-  last_allowable_month_leap <- max_month_for_window(month_ends_leap, 366L, window)
-
   base <- .data |>
     dplyr::mutate(IndexEvent = dplyr::if_else(!!idx_quo, 1L, 0L, missing = 0L)) |>
     .nrd_add_year_end_censoring(window = window, censor_method = censor_method) |>
     dplyr::mutate(
-      .nrd_is_leap = (YEAR %% 400L == 0L) | (YEAR %% 4L == 0L & YEAR %% 100L != 0L),
-      .nrd_last_allowable_month = dplyr::if_else(
-        .nrd_is_leap,
-        last_allowable_month_leap,
-        last_allowable_month_non_leap
-      ),
-      .nrd_followup_complete_strict = !is.na(Episode_DMONTH) & Episode_DMONTH <= .nrd_last_allowable_month,
       IndexEvent = dplyr::if_else(
         !allow_censored_followup &
           IndexEvent == 1L &
-          dplyr::coalesce(.nrd_followup_complete_strict, FALSE) == FALSE,
+          dplyr::coalesce(.nrd_followup_complete, FALSE) == FALSE,
         0L,
         IndexEvent
       )
     )
 
   readmit_names <- .nrd_resolve_readmit_vars(base, {{ readmit_vars }})
-  readmit_double_map <- .nrd_double_map(base, readmit_names)
 
   readmit_condition_vars <- intersect(
     colnames(base),
@@ -173,27 +154,40 @@ nrd_link_readmissions <- function(
 
   first_candidates <- paired |>
     dplyr::group_by(YEAR, NRD_VISITLINK, Episode_KEY_NRD_idx) |>
-    dplyr::slice_min(order_by = .nrd_gap_days, n = 1L, with_ties = TRUE)
+    dplyr::filter(.nrd_gap_days == min(.nrd_gap_days, na.rm = TRUE)) |>
+    dplyr::filter(Episode_Admission_Day_cand == min(Episode_Admission_Day_cand, na.rm = TRUE)) |>
+    dplyr::slice_min(order_by = Episode_KEY_NRD_cand, n = 1L, with_ties = FALSE) |>
+    dplyr::ungroup()
 
-  summarise_exprs <- list(
-    first_readmit_gap = rlang::expr(min(.nrd_gap_days, na.rm = TRUE)),
-    Episode_KEY_NRD_cand = rlang::expr(max(Episode_KEY_NRD_cand, na.rm = TRUE))
+  rhs_renamed <- c(
+    Episode_ID = "Episode_ID_cand",
+    Episode_KEY_NRD = "Episode_KEY_NRD_cand",
+    Episode_Admission_Day = "Episode_Admission_Day_cand",
+    Episode_Discharge_Day = "Episode_Discharge_Day_cand"
+  )
+  readmit_rhs_names <- ifelse(
+    readmit_names %in% names(rhs_renamed),
+    unname(rhs_renamed[readmit_names]),
+    readmit_names
   )
 
-  for (v in readmit_names) {
-    cand_sym <- rlang::sym(v)
-    out_nm <- paste0("readmit_", v)
-    if (.nrd_should_sum_var(base, v, double_map = readmit_double_map)) {
-      summarise_exprs[[out_nm]] <- rlang::expr(sum(!!cand_sym, na.rm = TRUE))
-    } else {
-      summarise_exprs[[out_nm]] <- rlang::expr(max(!!cand_sym, na.rm = TRUE))
-    }
+  readmit_exprs <- list()
+  if (length(readmit_names) > 0) {
+    readmit_exprs <- stats::setNames(
+      lapply(readmit_rhs_names, rlang::sym),
+      paste0("readmit_", readmit_names)
+    )
   }
 
   first_map <- first_candidates |>
-    dplyr::group_by(YEAR, NRD_VISITLINK, Episode_KEY_NRD_idx) |>
-    dplyr::summarise(!!!summarise_exprs, .groups = "drop") |>
-    dplyr::rename(Episode_KEY_NRD = Episode_KEY_NRD_idx)
+    dplyr::transmute(
+      YEAR,
+      NRD_VISITLINK,
+      Episode_KEY_NRD = Episode_KEY_NRD_idx,
+      first_readmit_gap = .nrd_gap_days,
+      Episode_KEY_NRD_cand,
+      !!!readmit_exprs
+    )
 
   base |>
     dplyr::left_join(first_map, by = c("YEAR", "NRD_VISITLINK", "Episode_KEY_NRD")) |>
@@ -219,8 +213,7 @@ nrd_link_readmissions <- function(
       -Episode_KEY_NRD_cand,
       -first_readmit_gap,
       -dplyr::any_of(c(
-        ".nrd_followup_complete", ".nrd_is_leap",
-        ".nrd_last_allowable_month", ".nrd_followup_complete_strict"
+        ".nrd_followup_complete"
       ))
     )
 }

@@ -9,7 +9,7 @@
 #'   `"8GB"`). If `NULL`, the pragma is not modified.
 #' @param temp_directory Optional existing base directory path used by DuckDB
 #'   for temporary spill files. If non-`NULL`, a process-specific
-#'   `easyNRD_<pid>` subdirectory is created and configured as DuckDB's
+#'   `easyNRD_<pid>_<token>` subdirectory is created and configured as DuckDB's
 #'   temporary directory.
 #' @param threads Optional positive integer for DuckDB worker threads. If
 #'   `NULL`, the pragma is not modified.
@@ -71,8 +71,14 @@ nrd_configure_engine <- function(
 
     .nrd_cleanup_session_temp_dirs(temp_directory = temp_directory, force = FALSE)
 
-    session_temp_dir <- file.path(temp_directory, paste0("easyNRD_", Sys.getpid()))
+    session_temp_dir <- tempfile(
+      pattern = paste0("easyNRD_", Sys.getpid(), "_"),
+      tmpdir = temp_directory
+    )
     dir.create(session_temp_dir, showWarnings = FALSE, recursive = TRUE)
+    if (!dir.exists(session_temp_dir)) {
+      rlang::abort("Failed to create a writable easyNRD session temp directory.")
+    }
   }
 
   if (!is.null(memory_limit)) {

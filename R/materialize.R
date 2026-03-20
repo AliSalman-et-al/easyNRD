@@ -58,16 +58,19 @@ nrd_materialize <- function(
   if (!is.numeric(row_group_size) ||
     length(row_group_size) != 1 ||
     is.na(row_group_size) ||
-    row_group_size <= 0) {
+    row_group_size <= 0 ||
+    row_group_size != as.integer(row_group_size)) {
     cli::cli_abort(c(
-      "`row_group_size` must be a single positive numeric or integer value.",
+      "`row_group_size` must be a single positive integer value.",
       i = "Use smaller values for wide clinical feature tables."
     ))
   }
   row_group_size <- as.integer(row_group_size)
 
   if (is.null(path)) {
-    return(dplyr::compute(data, name = name))
+    out <- dplyr::compute(data, name = name)
+    owner <- .nrd_get_owner(data)
+    return(.nrd_attach_owner(out, owner))
   }
 
   if (!is.character(path) || length(path) != 1 || is.na(path) || nchar(path) == 0) {

@@ -20,7 +20,7 @@ nrd_configure_engine(
 
 \item{temp_directory}{Optional existing base directory path used by DuckDB
 for temporary spill files. If non-\code{NULL}, a process-specific
-\verb{easyNRD_<pid>} subdirectory is created and configured as DuckDB's
+\verb{easyNRD_<pid>_<token>} subdirectory is created and configured as DuckDB's
 temporary directory.}
 
 \item{threads}{Optional positive integer for DuckDB worker threads. If

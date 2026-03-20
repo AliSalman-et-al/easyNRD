@@ -26,8 +26,9 @@ nrd_export <- function(.data, path, row_group_size = 250000L) {
     rlang::abort("`path` must be a single, non-empty file path string.")
   }
 
-  if (!is.numeric(row_group_size) || length(row_group_size) != 1 || is.na(row_group_size) || row_group_size <= 0) {
-    rlang::abort("`row_group_size` must be a single positive numeric or integer value.")
+  if (!is.numeric(row_group_size) || length(row_group_size) != 1 || is.na(row_group_size) ||
+    row_group_size <= 0 || row_group_size != as.integer(row_group_size)) {
+    rlang::abort("`row_group_size` must be a single positive integer value.")
   }
   row_group_size <- as.integer(row_group_size)
   if (row_group_size <= 0) {

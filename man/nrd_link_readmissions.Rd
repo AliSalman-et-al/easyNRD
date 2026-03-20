@@ -83,6 +83,8 @@ if (FALSE) {
 Other pipeline functions: 
 \code{\link{nrd_build_episodes}()},
 \code{\link{nrd_cleanup}()},
+\code{\link{nrd_close}()},
+\code{\link{nrd_connection_info}()},
 \code{\link{nrd_ingest}()},
 \code{\link{nrd_materialize}()}
 }

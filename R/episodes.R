@@ -85,10 +85,40 @@ nrd_build_episodes <- function(
     dplyr::ungroup()
 
   totchg_expr <- if ("TOTCHG" %in% colnames(row_keyed)) {
-    rlang::expr(sum(as.numeric(TOTCHG), na.rm = TRUE))
+    rlang::expr(
+      dplyr::if_else(
+        sum(dplyr::if_else(is.na(TOTCHG), 0L, 1L), na.rm = TRUE) > 0L,
+        sum(as.numeric(TOTCHG), na.rm = TRUE),
+        as.numeric(NA)
+      )
+    )
   } else {
     rlang::expr(as.numeric(NA))
   }
+
+  los_expr <- rlang::expr(
+    dplyr::if_else(
+      sum(dplyr::if_else(is.na(.nrd_los), 0L, 1L), na.rm = TRUE) > 0L,
+      sum(.nrd_los, na.rm = TRUE),
+      as.numeric(NA)
+    )
+  )
+
+  died_expr <- rlang::expr(
+    dplyr::if_else(
+      sum(dplyr::if_else(is.na(DIED), 0L, 1L), na.rm = TRUE) > 0L,
+      max(DIED, na.rm = TRUE),
+      NA_integer_
+    )
+  )
+
+  principal_dx_expr <- rlang::expr(
+    dplyr::if_else(
+      sum(dplyr::if_else(is.na(.nrd_dx1_first), 0L, 1L), na.rm = TRUE) > 0L,
+      max(.nrd_dx1_first, na.rm = TRUE),
+      NA_character_
+    )
+  )
 
   sameday_expr <- if ("SAMEDAYEVENT" %in% colnames(row_keyed)) {
     rlang::expr(
@@ -110,11 +140,11 @@ nrd_build_episodes <- function(
       Episode_DMONTH = max(Episode_DMONTH, na.rm = TRUE),
       Episode_Admission_Day = min(.nrd_admit_day, na.rm = TRUE),
       Episode_Discharge_Day = max(.nrd_discharge_day_row, na.rm = TRUE),
-      Episode_LOS = sum(.nrd_los, na.rm = TRUE),
+      Episode_LOS = !!los_expr,
       Episode_TOTCHG = !!totchg_expr,
-      Episode_DX10_Principal = max(.nrd_dx1_first, na.rm = TRUE),
+      Episode_DX10_Principal = !!principal_dx_expr,
       Episode_SAMEDAYEVENT = !!sameday_expr,
-      DIED = max(DIED, na.rm = TRUE),
+      DIED = !!died_expr,
       Episode_N_Stays = dplyr::n(),
       .groups = "drop"
     ) |>

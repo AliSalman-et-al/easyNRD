@@ -3,8 +3,8 @@ test_that("nrd_cleanup removes orphaned easyNRD directories", {
   dir.create(tmp, recursive = TRUE)
   on.exit(unlink(tmp, recursive = TRUE, force = TRUE), add = TRUE)
 
-  dead_dir <- file.path(tmp, "easyNRD_111111")
-  alive_dir <- file.path(tmp, paste0("easyNRD_", Sys.getpid()))
+  dead_dir <- file.path(tmp, "easyNRD_111111_old")
+  alive_dir <- file.path(tmp, paste0("easyNRD_", Sys.getpid(), "_active"))
   keep_dir <- file.path(tmp, "other_cache")
 
   dir.create(dead_dir)
@@ -34,7 +34,7 @@ test_that("nrd_cleanup force mode removes all easyNRD directories", {
   on.exit(unlink(tmp, recursive = TRUE, force = TRUE), add = TRUE)
 
   dir_a <- file.path(tmp, "easyNRD_1")
-  dir_b <- file.path(tmp, "easyNRD_2")
+  dir_b <- file.path(tmp, "easyNRD_2_token")
   keep_dir <- file.path(tmp, "manual_folder")
 
   dir.create(dir_a)

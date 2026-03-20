@@ -6,12 +6,13 @@ test_that("nrd_factorize converts dictionary columns to ordered factors", {
   )
 
   out <- nrd_factorize(dat)
+  dict <- get("nrd_dict", envir = asNamespace("easyNRD"))
 
   expect_true(is.factor(out$FEMALE))
   expect_true(is.factor(out$PAY1))
   expect_false(is.factor(out$AGE))
-  expect_identical(levels(out$FEMALE), unname(easyNRD:::nrd_dict$FEMALE))
-  expect_identical(levels(out$PAY1), unname(easyNRD:::nrd_dict$PAY1))
+  expect_identical(levels(out$FEMALE), unname(dict$FEMALE))
+  expect_identical(levels(out$PAY1), unname(dict$PAY1))
 })
 
 test_that("nrd_factorize ignores columns not in dictionary", {
@@ -32,10 +33,11 @@ test_that("nrd_factorize handles all-NA dictionary columns", {
   )
 
   out <- nrd_factorize(dat)
+  dict <- get("nrd_dict", envir = asNamespace("easyNRD"))
 
   expect_true(is.factor(out$FEMALE))
   expect_true(all(is.na(out$FEMALE)))
-  expect_identical(levels(out$FEMALE), unname(easyNRD:::nrd_dict$FEMALE))
+  expect_identical(levels(out$FEMALE), unname(dict$FEMALE))
 })
 
 test_that("nrd_factorize works with in-memory tbl_svy", {
@@ -49,10 +51,11 @@ test_that("nrd_factorize works with in-memory tbl_svy", {
 
   svy <- nrd_as_survey(dat)
   out <- nrd_factorize(svy)
+  dict <- get("nrd_dict", envir = asNamespace("easyNRD"))
 
   expect_s3_class(out, "tbl_svy")
   expect_true(is.factor(out$variables$FEMALE))
-  expect_identical(levels(out$variables$FEMALE), unname(easyNRD:::nrd_dict$FEMALE))
+  expect_identical(levels(out$variables$FEMALE), unname(dict$FEMALE))
 })
 
 test_that("nrd_factorize prioritizes _label columns from nrd_label keep_original", {
@@ -64,9 +67,10 @@ test_that("nrd_factorize prioritizes _label columns from nrd_label keep_original
 
   labeled <- nrd_label(dat, FEMALE, .keep_original = TRUE)
   out <- nrd_factorize(labeled)
+  dict <- get("nrd_dict", envir = asNamespace("easyNRD"))
 
   expect_type(out$FEMALE, "integer")
   expect_true(is.factor(out$FEMALE_label))
-  expect_identical(levels(out$FEMALE_label), unname(easyNRD:::nrd_dict$FEMALE))
+  expect_identical(levels(out$FEMALE_label), unname(dict$FEMALE))
   expect_identical(as.character(out$FEMALE_label), c("Male", "Female", "Male"))
 })
