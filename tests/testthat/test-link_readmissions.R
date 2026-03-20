@@ -1,169 +1,385 @@
-test_that("HCUP-style index definition excludes deaths and same-day/transfer combined stays", {
-  with_duckdb_connection(function(con) {
-    dat <- tibble::tibble(
-      YEAR = c(2019L, 2019L, 2019L, 2019L),
-      NRD_VISITLINK = c("A001", "A002", "A003", "A003"),
-      Episode_ID = c(1L, 1L, 1L, 2L),
-      Episode_KEY_NRD = c(1001L, 2001L, 3001L, 3002L),
-      Episode_Admission_Day = c(100, 120, 140, 150),
-      Episode_Discharge_Day = c(105, 124, 145, 152),
-      Episode_DMONTH = c(4L, 4L, 5L, 5L),
-      Episode_SAMEDAYEVENT = c(0L, 0L, 1L, 0L),
-      DIED = c(1L, 0L, 0L, 0L)
-    )
+test_that("denominator is preserved and year scope is respected", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2020L),
+    NRD_VISITLINK = c("A001", "A001"),
+    KEY_NRD = c(101L, 201L),
+    NRD_DaysToEvent = c(10L, 15L),
+    LOS = c(2L, 3L),
+    DMONTH = c(11L, 1L),
+    DIED = c(0L, 0L),
+    is_index = c(1L, 1L),
+    is_readmit = c(1L, 1L)
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
 
-    DBI::dbWriteTable(con, "episode_input_hcup_index", dat)
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
 
-    out <- dplyr::tbl(con, "episode_input_hcup_index") |>
-      nrd_link_readmissions(
-        index_condition = DIED == 0L & Episode_SAMEDAYEVENT == 0L,
-        readmit_condition = TRUE,
-        window = 30L
-      ) |>
-      dplyr::arrange(NRD_VISITLINK, Episode_ID) |>
-      dplyr::collect()
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = is_readmit == 1L,
+    window = 30L
+  ) |>
+    dplyr::arrange(YEAR, KEY_NRD) |>
+    dplyr::collect()
 
-    expect_equal(out$IndexEvent[out$Episode_KEY_NRD == 1001L], 0L)
-    expect_equal(out$IndexEvent[out$Episode_KEY_NRD == 3001L], 0L)
-    expect_equal(out$IndexEvent[out$Episode_KEY_NRD == 3002L], 1L)
-  })
+  expect_equal(nrow(out), nrow(dat))
+  expect_identical(out$outcome_status[out$KEY_NRD == 101L], "Censored")
+  expect_true(is.na(out$outcome_status[out$KEY_NRD == 201L]) || out$outcome_status[out$KEY_NRD == 201L] %in% c("Censored", "Readmitted"))
 })
 
-test_that("all-cause readmission counts even when readmission discharge has death", {
-  with_duckdb_connection(function(con) {
-    dat <- tibble::tibble(
-      YEAR = c(2019L, 2019L),
-      NRD_VISITLINK = c("A010", "A010"),
-      Episode_ID = c(1L, 2L),
-      Episode_KEY_NRD = c(1010L, 1011L),
-      Episode_Admission_Day = c(10, 15),
-      Episode_Discharge_Day = c(12, 18),
-      Episode_DMONTH = c(1L, 1L),
-      Episode_SAMEDAYEVENT = c(0L, 0L),
-      DIED = c(0L, 1L)
-    )
+test_that("time_to_event uses the exact HCUP gap formula", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001"),
+    KEY_NRD = c(101L, 102L),
+    NRD_DaysToEvent = c(10L, 20L),
+    LOS = c(3L, 2L),
+    DMONTH = c(1L, 1L),
+    DIED = c(0L, 0L),
+    is_index = c(1L, 1L),
+    is_readmit = c(1L, 1L)
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
 
-    DBI::dbWriteTable(con, "episode_input_death_readmit", dat)
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
 
-    out <- dplyr::tbl(con, "episode_input_death_readmit") |>
-      nrd_link_readmissions(
-        index_condition = DIED == 0L & Episode_SAMEDAYEVENT == 0L,
-        readmit_condition = TRUE,
-        window = 30L,
-        readmit_vars = c(DIED, Episode_KEY_NRD)
-      ) |>
-      dplyr::collect()
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = is_readmit == 1L,
+    window = 30L,
+    readmit_vars = KEY_NRD
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
 
-    index_row <- out[out$Episode_ID == 1L, ]
-    expect_equal(index_row$IndexEvent, 1L)
-    expect_identical(index_row$outcome_status, "Readmitted")
-    expect_equal(index_row$time_to_event, 3)
-    expect_equal(index_row$readmit_DIED, 1L)
-    expect_equal(index_row$readmit_Episode_KEY_NRD, 1011L)
-  })
+  expect_equal(nrow(out), nrow(dat))
+  expect_identical(out$IndexEvent, c(1L, 1L))
+  expect_identical(out$time_to_event[[1]], 7)
+  expect_identical(out$readmit_KEY_NRD[[1]], 102L)
 })
 
-test_that("readmissions can become later index events and only first qualifying readmission is linked", {
-  with_duckdb_connection(function(con) {
-    dat <- tibble::tibble(
-      YEAR = c(2019L, 2019L, 2019L, 2019L),
-      NRD_VISITLINK = c("A020", "A020", "A020", "A020"),
-      Episode_ID = c(1L, 2L, 3L, 4L),
-      Episode_KEY_NRD = c(2010L, 2011L, 2012L, 2013L),
-      Episode_Admission_Day = c(10, 15, 20, 60),
-      Episode_Discharge_Day = c(10, 16, 21, 61),
-      Episode_DMONTH = c(1L, 1L, 1L, 3L),
-      Episode_SAMEDAYEVENT = c(0L, 0L, 0L, 0L),
-      DIED = c(0L, 0L, 0L, 0L)
-    )
+test_that("only the first qualifying readmission is linked", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001", "A001"),
+    KEY_NRD = c(101L, 102L, 103L),
+    NRD_DaysToEvent = c(10L, 18L, 25L),
+    LOS = c(2L, 1L, 1L),
+    DMONTH = c(1L, 1L, 1L),
+    DIED = c(0L, 0L, 0L),
+    is_index = c(1L, 1L, 1L),
+    is_readmit = c(1L, 1L, 1L),
+    severity = c("index", "first", "later")
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
 
-    DBI::dbWriteTable(con, "episode_input_recurrent_index", dat)
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
 
-    out <- dplyr::tbl(con, "episode_input_recurrent_index") |>
-      nrd_link_readmissions(
-        index_condition = DIED == 0L & Episode_SAMEDAYEVENT == 0L,
-        readmit_condition = TRUE,
-        window = 30L,
-        readmit_vars = c(Episode_KEY_NRD)
-      ) |>
-      dplyr::arrange(Episode_ID) |>
-      dplyr::collect()
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = is_readmit == 1L,
+    window = 30L,
+    readmit_vars = c(KEY_NRD, severity)
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
 
-    row1 <- out[out$Episode_ID == 1L, ]
-    row2 <- out[out$Episode_ID == 2L, ]
-
-    expect_equal(row1$IndexEvent, 1L)
-    expect_equal(row1$time_to_event, 5)
-    expect_identical(row1$outcome_status, "Readmitted")
-    expect_equal(row1$readmit_Episode_KEY_NRD, 2011L)
-
-    expect_equal(row2$IndexEvent, 1L)
-    expect_equal(row2$time_to_event, 4)
-    expect_identical(row2$outcome_status, "Readmitted")
-    expect_equal(row2$readmit_Episode_KEY_NRD, 2012L)
-  })
+  expect_equal(nrow(out), nrow(dat))
+  expect_identical(out$readmit_KEY_NRD[[1]], 102L)
+  expect_identical(out$readmit_severity[[1]], "first")
+  expect_identical(out$time_to_event[[1]], 6)
 })
 
-test_that("linkage is year-bounded even with identical NRD_VISITLINK", {
-  with_duckdb_connection(function(con) {
-    dat <- tibble::tibble(
-      YEAR = c(2019L, 2020L),
-      NRD_VISITLINK = c("A030", "A030"),
-      Episode_ID = c(1L, 1L),
-      Episode_KEY_NRD = c(3010L, 4010L),
-      Episode_Admission_Day = c(348, 5),
-      Episode_Discharge_Day = c(350, 7),
-      Episode_DMONTH = c(12L, 1L),
-      Episode_SAMEDAYEVENT = c(0L, 0L),
-      DIED = c(0L, 0L)
-    )
+test_that("tie-breaking falls through to smaller KEY_NRD when gap and day tie", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001", "A001"),
+    KEY_NRD = c(101L, 102L, 103L),
+    NRD_DaysToEvent = c(10L, 20L, 20L),
+    LOS = c(2L, 1L, 1L),
+    DMONTH = c(1L, 1L, 1L),
+    DIED = c(0L, 0L, 0L),
+    is_index = c(1L, 1L, 1L),
+    is_readmit = c(1L, 1L, 1L),
+    marker = c("index", "smaller_key", "larger_key")
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
 
-    DBI::dbWriteTable(con, "episode_input_cross_year", dat)
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
 
-    out <- dplyr::tbl(con, "episode_input_cross_year") |>
-      nrd_link_readmissions(
-        index_condition = DIED == 0L & Episode_SAMEDAYEVENT == 0L,
-        readmit_condition = TRUE,
-        window = 30L,
-        readmit_vars = c(Episode_KEY_NRD),
-        allow_censored_followup = TRUE
-      ) |>
-      dplyr::collect()
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = is_readmit == 1L,
+    window = 30L,
+    readmit_vars = c(KEY_NRD, marker)
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
 
-    dec_row <- out[out$YEAR == 2019L, ]
-    expect_equal(dec_row$IndexEvent, 1L)
-    expect_identical(dec_row$outcome_status, "Censored")
-    expect_true(is.na(dec_row$readmit_Episode_KEY_NRD))
-  })
+  expect_equal(nrow(out), nrow(dat))
+  expect_identical(out$readmit_KEY_NRD[[1]], 102L)
+  expect_identical(out$readmit_marker[[1]], "smaller_key")
 })
 
-test_that("index eligibility uses discharge day for year-end follow-up completeness", {
-  with_duckdb_connection(function(con) {
-    dat <- tibble::tibble(
-      YEAR = c(2019L, 2019L),
-      NRD_VISITLINK = c("A040", "A041"),
-      Episode_ID = c(1L, 1L),
-      Episode_KEY_NRD = c(5010L, 5011L),
-      Episode_Admission_Day = c(330, 334),
-      Episode_Discharge_Day = c(335, 336),
-      Episode_DMONTH = c(11L, 11L),
-      Episode_SAMEDAYEVENT = c(0L, 0L),
-      DIED = c(0L, 0L)
+test_that("index censoring uses the DMONTH threshold", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A002"),
+    KEY_NRD = c(101L, 102L),
+    NRD_DaysToEvent = c(10L, 15L),
+    LOS = c(2L, 2L),
+    DMONTH = c(12L, 11L),
+    DIED = c(0L, 0L),
+    is_index = c(1L, 1L),
+    is_readmit = c(0L, 0L)
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = is_readmit == 1L,
+    window = 30L
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
+
+  expect_equal(nrow(out), nrow(dat))
+  expect_identical(out$IndexEvent, c(0L, 1L))
+})
+
+test_that("death at index is excluded and labeled correctly", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A002"),
+    KEY_NRD = c(101L, 102L),
+    NRD_DaysToEvent = c(10L, 20L),
+    LOS = c(2L, 2L),
+    DMONTH = c(1L, 1L),
+    DIED = c(1L, 0L),
+    is_index = c(1L, 0L),
+    is_readmit = c(0L, 0L)
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = is_readmit == 1L,
+    window = 30L
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
+
+  expect_equal(nrow(out), nrow(dat))
+  expect_identical(out$IndexEvent[[1]], 0L)
+  expect_identical(out$outcome_status[[1]], "Died at Index")
+  expect_identical(out$time_to_event[[1]], 0)
+})
+
+test_that("non-index rows have NA outcomes and censored rows have non-missing time", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A002"),
+    KEY_NRD = c(101L, 102L),
+    NRD_DaysToEvent = c(10L, 20L),
+    LOS = c(2L, 2L),
+    DMONTH = c(1L, 1L),
+    DIED = c(0L, 0L),
+    is_index = c(0L, 1L),
+    is_readmit = c(0L, 0L)
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path) |>
+    nrd_prepare()
+  on.exit(nrd_close(data), add = TRUE)
+
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = is_readmit == 1L,
+    window = 30L
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
+
+  expect_equal(nrow(out), nrow(dat))
+  expect_identical(out$IndexEvent[[1]], 0L)
+  expect_true(is.na(out$time_to_event[[1]]))
+  expect_true(is.na(out$outcome_status[[1]]))
+  expect_identical(out$outcome_status[[2]], "Censored")
+  expect_false(is.na(out$time_to_event[[2]]))
+})
+
+test_that("readmit_vars are prefixed and remain NA for non-readmitted rows", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001", "B001"),
+    KEY_NRD = c(101L, 102L, 201L),
+    NRD_DaysToEvent = c(10L, 18L, 30L),
+    LOS = c(2L, 1L, 2L),
+    DMONTH = c(1L, 1L, 1L),
+    DIED = c(0L, 0L, 0L),
+    is_index = c(1L, 1L, 1L),
+    is_readmit = c(1L, 1L, 0L),
+    severity = c("index", "readmit", "censored")
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = is_readmit == 1L,
+    window = 30L,
+    readmit_vars = c(KEY_NRD, severity)
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
+
+  expect_equal(nrow(out), nrow(dat))
+  expect_true(all(c("readmit_KEY_NRD", "readmit_severity") %in% names(out)))
+  expect_identical(out$readmit_KEY_NRD[[1]], 102L)
+  expect_true(is.na(out$readmit_KEY_NRD[[3]]))
+  expect_true(is.na(out$readmit_severity[[3]]))
+})
+
+test_that("readmissions can become later index events", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001", "A001"),
+    KEY_NRD = c(101L, 102L, 103L),
+    NRD_DaysToEvent = c(10L, 20L, 35L),
+    LOS = c(2L, 2L, 2L),
+    DMONTH = c(1L, 1L, 2L),
+    DIED = c(0L, 0L, 0L),
+    is_index = c(1L, 1L, 1L),
+    is_readmit = c(1L, 1L, 1L)
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = is_readmit == 1L,
+    window = 30L,
+    readmit_vars = KEY_NRD
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
+
+  expect_equal(nrow(out), nrow(dat))
+  expect_identical(out$readmit_KEY_NRD[[1]], 102L)
+  expect_identical(out$readmit_KEY_NRD[[2]], 103L)
+  expect_identical(out$outcome_status[[2]], "Readmitted")
+})
+
+test_that("nrd_link_readmissions stays lazy and uses a DuckDB compute checkpoint", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001"),
+    KEY_NRD = c(101L, 102L),
+    NRD_DaysToEvent = c(10L, 18L),
+    LOS = c(2L, 1L),
+    DMONTH = c(1L, 1L),
+    DIED = c(0L, 0L),
+    is_index = c(1L, 1L),
+    is_readmit = c(1L, 1L)
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  compute_calls <- 0L
+  original_compute <- dplyr::compute
+
+  out <- testthat::with_mocked_bindings(
+    nrd_link_readmissions(
+      data,
+      index_condition = is_index == 1L,
+      readmit_condition = is_readmit == 1L,
+      window = 30L
+    ),
+    compute = function(x, ...) {
+      compute_calls <<- compute_calls + 1L
+      result <- original_compute(x, ...)
+      expect_s3_class(result, "tbl_lazy")
+      expect_true(inherits(dbplyr::remote_con(result), "duckdb_connection"))
+      result
+    },
+    collect = function(...) {
+      stop("collect should not be called")
+    },
+    .package = "dplyr"
+  )
+
+  expect_equal(compute_calls, 1L)
+  expect_s3_class(out, "tbl_lazy")
+  expect_true(inherits(dbplyr::remote_con(out), "duckdb_connection"))
+})
+
+test_that("final SQL snapshot is stable", {
+  dat <- tibble::tibble(
+    YEAR = c(2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001"),
+    KEY_NRD = c(101L, 102L),
+    NRD_DaysToEvent = c(10L, 18L),
+    LOS = c(2L, 1L),
+    DMONTH = c(1L, 1L),
+    DIED = c(0L, 0L),
+    is_index = c(1L, 1L),
+    is_readmit = c(1L, 1L),
+    severity = c("index", "readmit")
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  sql <- dbplyr::sql_render(
+    nrd_link_readmissions(
+      data,
+      index_condition = is_index == 1L,
+      readmit_condition = is_readmit == 1L,
+      window = 30L,
+      readmit_vars = c(KEY_NRD, severity)
     )
+  )
 
-    DBI::dbWriteTable(con, "episode_input_day_boundary", dat)
+  sql <- gsub("arrow_[0-9]+", "arrow_tbl", sql)
+  sql <- gsub("dbplyr_[A-Za-z0-9_]+", "checkpoint_tbl", sql)
 
-    out <- dplyr::tbl(con, "episode_input_day_boundary") |>
-      nrd_link_readmissions(
-        index_condition = TRUE,
-        readmit_condition = TRUE,
-        window = 30L,
-        allow_censored_followup = FALSE
-      ) |>
-      dplyr::arrange(Episode_KEY_NRD) |>
-      dplyr::collect()
-
-    expect_equal(out$IndexEvent[out$Episode_KEY_NRD == 5010L], 1L)
-    expect_equal(out$IndexEvent[out$Episode_KEY_NRD == 5011L], 0L)
-  })
+  expect_snapshot(cat(sql))
 })

@@ -2,80 +2,43 @@
 % Please edit documentation in R/link_readmissions.R
 \name{nrd_link_readmissions}
 \alias{nrd_link_readmissions}
-\title{Link Index Episodes to Readmissions}
+\title{Link first qualifying readmissions back to eligible index discharges}
 \usage{
 nrd_link_readmissions(
-  .data,
+  data,
   index_condition,
   readmit_condition,
   window = 30L,
-  censor_method = c("drop_month", "mid_month"),
-  readmit_vars = NULL,
-  allow_censored_followup = FALSE
+  readmit_vars = NULL
 )
 }
 \arguments{
-\item{.data}{Episode-level lazy table.}
+\item{data}{A DuckDB-backed lazy table.}
 
-\item{index_condition}{Unquoted logical expression that defines index events.}
+\item{index_condition}{Unquoted logical expression defining candidate index rows.}
 
-\item{readmit_condition}{Unquoted logical expression that defines qualifying
-readmission events.}
+\item{readmit_condition}{Unquoted logical expression defining qualifying readmissions.}
 
 \item{window}{Integer readmission window in days. Defaults to \code{30L}.}
 
-\item{censor_method}{Year-end censoring strategy. \code{"drop_month"} (default)
-marks late-year discharges as non-index events to guarantee complete
-follow-up for the selected window while preserving them as candidate
-readmissions. \code{"mid_month"} uses a mid-month approximation for censoring
-time.}
-
-\item{readmit_vars}{Optional tidyselect specification for columns to pull from
-the linked readmission and append as wide \verb{readmit_*} columns.}
-
-\item{allow_censored_followup}{Logical flag that controls treatment of index
-stays discharged too late in the year to complete full same-year follow-up.
-Defaults to \code{FALSE} for strict HCUP-style binary readmission denominators;
-these rows are retained but converted to \code{IndexEvent = 0L}. Set to \code{TRUE}
-to retain such rows as index stays with administrative right-censoring at
-calendar year end.}
+\item{readmit_vars}{Optional tidyselect specification for columns to append
+from the linked readmission with a \code{readmit_} prefix.}
 }
 \value{
-A denominator-preserving lazy table with readmission linkage,
-\code{time_to_event}, and \code{outcome_status}.
+A DuckDB-backed \code{tbl_lazy} with linkage results added.
 }
 \description{
-\code{nrd_link_readmissions()} links index discharges to the first qualifying
-subsequent admission within a readmission window while preserving the complete
-denominator.
-}
-\details{
-Step 3 of the legacy prototype pipeline. Under \code{censor_method = "drop_month"},
-late-year discharges that cannot guarantee full follow-up are retained in the
-data but converted to \code{IndexEvent = 0L}, so they remain eligible as
-readmission candidates for earlier index episodes. For standard readmission
-analyses aligned to HCUP recommendations, include
-\code{Episode_SAMEDAYEVENT == 0L} in \code{index_condition} when that field is
-available from an upstream episode-building step.
-
-For standard readmission
-rate denominators, exclude index stays with \code{outcome_status == "Died at Index"} (typically equivalent to requiring \code{DIED == 0L} at index discharge).
-Those rows can be retained when fitting competing-risks or multi-state
-survival models. The output preserves \code{DIED} and linked event timing fields,
-so it can be passed directly to competing-risk modeling workflows in
-\code{survival}.
+\code{nrd_link_readmissions()} links the first qualifying readmission within a
+fixed window while preserving the full denominator.
 }
 \examples{
-\donttest{
 if (FALSE) {
+  data <- nrd_ingest("/path/to/nrd.parquet")
   linked <- nrd_link_readmissions(
-    nrd_ingest("/path/to/nrd.parquet"),
-      index_condition = Episode_DX10_Principal == "I214" & Episode_SAMEDAYEVENT == 0L,
-      readmit_condition = DIED == 0L,
-      window = 30L,
-      readmit_vars = c(Episode_TOTCHG, Episode_LOS, DIED)
-    )
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = TRUE,
+    readmit_vars = c(KEY_NRD, LOS)
+  )
 }
 }
-}
-\concept{pipeline functions}
