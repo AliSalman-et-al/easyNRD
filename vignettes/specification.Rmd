@@ -1,0 +1,488 @@
+---
+title: "easyNRD Specification"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{easyNRD Specification}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Purpose
+
+This document is the implementation contract for the alpha rewrite of
+`easyNRD`. It defines what the package does, what it does not do, and which
+behaviors are protected by tests. It is a specification, not a tutorial.
+
+The package exists to support correct, readable, DuckDB-backed analysis of the
+AHRQ Nationwide Readmissions Database (NRD) for clinical research.
+
+# Governing Principles
+
+The rewrite follows these priorities, in order:
+
+1. Correctness above all else.
+2. Clarity for human developers.
+3. Deliberate DuckDB efficiency.
+4. Minimal alpha scope.
+5. CRAN discipline.
+
+When principles conflict, higher items win.
+
+# Unit of Analysis
+
+`easyNRD` is a discharge-level package. Each input row represents one discharge
+record exactly as delivered in the NRD.
+
+The package does not reconstruct transfer chains, re-collapse same-day stays,
+or manufacture a higher-level episode representation. HCUP has already applied
+ its own preprocessing before release of the NRD, and the raw transfer pairs are
+not available in the delivered data.
+
+# Identifier Semantics
+
+The implementation must respect the following NRD identifier rules:
+
+- `KEY_NRD` identifies one discharge record.
+- `NRD_VISITLINK` links discharges for a patient within the delivered linkage
+  scope.
+- `HOSP_NRD` identifies hospitals within a year.
+- `YEAR` must scope every linkage operation.
+
+Implications:
+
+- `KEY_NRD` is never a patient identifier.
+- `NRD_VISITLINK` cannot be used across years.
+- `HOSP_NRD` cannot be used to track hospitals across years.
+- Any patient-level join that ignores `YEAR` is incorrect.
+
+# Time Semantics
+
+The implementation uses HCUP timing definitions directly.
+
+- `NRD_DAYSTOEVENT` is the admission day on a per-patient timeline.
+- `LOS` is length of stay.
+- `Discharge_Day = NRD_DAYSTOEVENT + LOS`.
+- The exact gap between two discharges for the same patient-year is:
+
+```r
+gap = NRD_DAYSTOEVENT_next - NRD_DAYSTOEVENT_prev - LOS_prev
+```
+
+This formula is the only correct readmission-gap formula used by the package.
+
+# Year-End Censoring
+
+The alpha package supports one censoring rule only: HCUP-compliant month-based
+censoring using `DMONTH`.
+
+For a readmission window `w` in days, an index discharge is eligible only when:
+
+```r
+DMONTH <= 12L - ceiling(w / 30L)
+```
+
+Examples:
+
+- 30-day window: `DMONTH <= 11`
+- 90-day window: `DMONTH <= 9`
+
+There are no alternative censoring modes, no day-of-year censoring logic, no
+leap-year handling branch, and no user option to relax censoring.
+
+# Public API
+
+The alpha version exports exactly these functions and nothing else:
+
+```r
+nrd_ingest(paths)
+nrd_prepare(data)
+nrd_flag_condition(data, name, pattern = NULL, codes = NULL, type, scope)
+nrd_link_readmissions(data, index_condition, readmit_condition, window = 30L, readmit_vars = NULL)
+nrd_select(data, ...)
+nrd_export(data, path)
+nrd_as_survey(data)
+nrd_label(data, ..., .keep_original = FALSE)
+nrd_factorize(data)
+nrd_demographics()
+nrd_hospital_vars()
+nrd_close(data)
+nrd_cache_dir()
+nrd_cleanup(path, force = FALSE)
+```
+
+No deleted function remains as an exported compatibility shim.
+
+# Explicit Non-Goals
+
+The alpha rewrite does not provide:
+
+- transfer or same-day stay re-collapsing
+- internal Elixhauser or CCSR grouping based on toy crosswalks
+- a public pivot helper
+- alternative censoring methods
+- optional censored-follow-up behavior
+- public DuckDB configuration knobs
+- public connection-inspection helpers
+- a materialization wrapper beyond export and re-ingest composition
+
+# DuckDB Execution Model
+
+The package is designed around DuckDB-backed lazy execution.
+
+- Public pipeline functions operate lazily unless a deliberate eager pass is
+  required by the specification.
+- `nrd_ingest()` opens a fresh in-memory DuckDB connection per call.
+- Every new connection configures a process-scoped `temp_directory` under
+  `nrd_cache_dir()`.
+- Every new connection sets `preserve_insertion_order = FALSE`.
+- The package never uses `read.csv()` or `DBI::dbWriteTable()` to ingest NRD
+  files.
+- The package never uses `PIVOT`, `string_agg()`, or `list()` aggregates in SQL
+  generation.
+- Expensive joins should project and filter early.
+- `dplyr::compute()` is used deliberately as a checkpoint before the
+  readmission self-join.
+
+# Function Contracts
+
+## `nrd_ingest(paths)`
+
+`nrd_ingest()` accepts one of three inputs:
+
+- a character vector of `.parquet` file paths
+- an Arrow dataset or Arrow query
+- an existing DuckDB-backed lazy table, returned unchanged
+
+Behavioral contract:
+
+- Opens a fresh in-memory DuckDB connection for parquet-path or Arrow inputs.
+- Configures `temp_directory` to a new process-scoped subdirectory under
+  `nrd_cache_dir()` with the form `easyNRD_<pid>_<token>`.
+- Sets `preserve_insertion_order = FALSE` silently.
+- Registers parquet data through `arrow::open_dataset()` and
+  `arrow::to_duckdb()`.
+- Standardizes exactly these column-name variants:
+  - `NRD_VisitLink` -> `NRD_VISITLINK`
+  - `NRD_DaysToEvent` -> `NRD_DAYSTOEVENT`
+- Attaches owner metadata so `nrd_close()` can release resources.
+- Returns a DuckDB-backed `tbl_lazy`.
+- Never calls `collect()`.
+
+## `nrd_prepare(data)`
+
+`nrd_prepare()` accepts a DuckDB-backed lazy table from `nrd_ingest()`.
+
+Behavioral contract:
+
+- Asserts required columns:
+  `NRD_VISITLINK`, `KEY_NRD`, `NRD_DAYSTOEVENT`, `LOS`, `DMONTH`, `DIED`,
+  `YEAR`.
+- Adds one column only:
+
+```r
+Discharge_Day = NRD_DAYSTOEVENT + LOS
+```
+
+- Does not modify existing columns.
+- Does not drop or add rows.
+- Does not re-collapse transfers.
+- Never calls `collect()`.
+
+## `nrd_flag_condition(data, name, pattern = NULL, codes = NULL, type, scope)`
+
+`nrd_flag_condition()` creates a logical phenotype flag from diagnosis or
+procedure columns.
+
+Behavioral contract:
+
+- Exactly one of `pattern` or `codes` must be supplied.
+- `type` is either:
+  - `"dx"` for `I10_DX1` through `I10_DX40`
+  - `"pr"` for `I10_PR1` through `I10_PR25`
+- `scope` is one of:
+  - `"principal"` for the first column only
+  - `"secondary"` for positions 2 and higher
+  - `"all"` for all available columns in the type
+- Pattern mode applies regex directly to data values and must translate to SQL
+  regex on DuckDB.
+- Codes mode performs exact matching with SQL `IN (...)` semantics.
+- `NA` values must evaluate to `FALSE` in the final flag.
+- No internal static ICD dictionary is consulted.
+- Never calls `collect()`.
+
+## `nrd_link_readmissions(data, index_condition, readmit_condition, window = 30L, readmit_vars = NULL)`
+
+`nrd_link_readmissions()` links the first qualifying readmission back to each
+eligible index discharge while preserving the full denominator.
+
+Required columns:
+
+- `YEAR`
+- `NRD_VISITLINK`
+- `KEY_NRD`
+- `NRD_DAYSTOEVENT`
+- `LOS`
+- `DMONTH`
+- `DIED`
+
+Required algorithm:
+
+1. Compute index eligibility:
+
+```r
+is_index_eligible = DMONTH <= 12L - ceiling(window / 30L)
+```
+
+2. Compute index status:
+
+```r
+IndexEvent = is_index_eligible & DIED == 0L & (!!index_condition)
+```
+
+3. Materialize the annotated base table with `dplyr::compute()` inside DuckDB.
+4. Create an index pool containing only index rows and only the columns needed
+   for linkage.
+5. Create a candidate pool containing rows satisfying `readmit_condition`, with
+   no censoring filter, and only the columns needed for linkage plus requested
+   `readmit_vars`.
+6. Join candidate and index pools on `YEAR` and `NRD_VISITLINK`.
+7. Exclude self-matches with `KEY_NRD_cand != KEY_NRD_idx`.
+8. Compute the gap exactly as:
+
+```r
+gap = DTE_cand - DTE_idx - LOS_idx
+```
+
+9. Keep only `gap >= 1L & gap <= window`.
+10. For each index discharge, keep the first qualifying readmission using:
+    - smallest `gap`
+    - then smallest `DTE_cand`
+    - then smallest `KEY_NRD_cand`
+11. Left join the first-readmission map back to the checkpointed full table.
+
+Output contract:
+
+- All input rows are preserved.
+- `IndexEvent` is stored as integer `1L` or `0L`.
+- Added columns include:
+  - `IndexEvent`
+  - `time_to_event`
+  - `outcome_status`
+  - `readmit_*` columns derived from `readmit_vars`
+- `outcome_status` is one of:
+  - `"Readmitted"`
+  - `"Censored"`
+  - `"Died at Index"`
+  - `NA`
+- `time_to_event` is:
+  - exact `gap` for readmitted index rows
+  - `0` for died-at-index rows
+  - capped remaining window days for censored index rows
+  - `NA` for non-index rows
+- If `Discharge_Day` exists from `nrd_prepare()`, it may be used in censored
+  follow-up calculations; otherwise the same quantity is computed internally as
+  `NRD_DAYSTOEVENT + LOS`.
+- The function never calls `collect()`.
+
+## `nrd_select(data, ...)`
+
+`nrd_select()` is a projection helper that preserves essential identifiers and
+analysis fields.
+
+Behavioral contract:
+
+- It errors if any of these linkage-critical identifiers are missing:
+  - `YEAR`
+  - `NRD_VISITLINK`
+  - `KEY_NRD`
+- It always retains those three columns.
+- It also retains these columns if present:
+  - `HOSP_NRD`
+  - `DISCWT`
+  - `NRD_STRATUM`
+  - `IndexEvent`
+  - `time_to_event`
+  - `outcome_status`
+  - `Discharge_Day`
+  - `DMONTH`
+  - `DIED`
+  - `NRD_DAYSTOEVENT`
+  - `LOS`
+- Optional retained columns are selected with `dplyr::any_of()` semantics so
+  the function can be used before survey variables are present.
+- User-selected columns supplied through `...` are appended.
+- The function works on both lazy tables and in-memory data frames.
+
+## `nrd_export(data, path)`
+
+Behavioral contract:
+
+- `path` must end in `.parquet`.
+- Parent directories are created if needed.
+- For DuckDB-backed lazy tables, export uses rendered SQL and DuckDB `COPY`.
+- Export settings are fixed to:
+
+```sql
+FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 122880
+```
+
+- The row-group size is not user-configurable in the alpha.
+- Returns `path` invisibly.
+
+## `nrd_as_survey(data)`
+
+Behavioral contract:
+
+- Asserts `HOSP_NRD`, `DISCWT`, and `NRD_STRATUM`.
+- Computes survey degrees of freedom as:
+
+```r
+n_distinct(HOSP_NRD) - n_distinct(NRD_STRATUM)
+```
+
+- This degree-of-freedom calculation is one deliberate eager database round
+  trip and should be documented as such in code.
+- Returns:
+
+```r
+srvyr::as_survey(
+  data,
+  id = HOSP_NRD,
+  weights = DISCWT,
+  strata = NRD_STRATUM,
+  nest = TRUE,
+  degf = degf
+)
+```
+
+- Works on in-memory data frames and lazy DuckDB tables.
+
+## `nrd_label(data, ..., .keep_original = FALSE)`
+
+`nrd_label()` remains in scope because its current behavior is substantively
+correct.
+
+Behavioral contract:
+
+- Works on lazy tables and in-memory data frames.
+- Applies labels from `nrd_dict`.
+- Pushes `CASE WHEN` logic to SQL for lazy tables.
+- Supports `.keep_original = TRUE` by preserving original coded columns and
+  writing labeled values to suffixed columns.
+
+## `nrd_factorize(data)`
+
+`nrd_factorize()` also remains in scope with light cleanup only.
+
+Behavioral contract:
+
+- Works on in-memory data frames and survey objects backed by in-memory data.
+- Errors clearly on lazy input.
+- Converts labeled columns to factors using `nrd_dict` level order.
+
+## `nrd_close(data)`
+
+Behavioral contract:
+
+- Retrieves owner metadata from a managed DuckDB-backed lazy table.
+- Disconnects the underlying connection with:
+
+```r
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
+
+- Removes the associated session temp directory.
+- Marks the owner as closed.
+- Returns `TRUE` invisibly if resources were released.
+- Returns `FALSE` invisibly if the object was already closed or unmanaged.
+
+The alpha implementation uses a thin owner wrapper only. It does not rely on
+`reg.finalizer()`.
+
+## `nrd_cache_dir()`
+
+Behavioral contract:
+
+- Resolves the cache directory in this order:
+  1. `EASYNRD_CACHE_DIR`
+  2. `getOption("easynrd.cache_dir")`
+  3. `tools::R_user_dir("easyNRD", "cache")`
+- Creates the directory if needed.
+
+## `nrd_cleanup(path, force = FALSE)`
+
+Behavioral contract:
+
+- Removes only `easyNRD_*` subdirectories under `path`.
+- Uses PID-aware liveness checks to avoid deleting session directories owned by
+  active processes when `force = FALSE`.
+- Removes all matching directories when `force = TRUE`.
+
+# Required Test Invariants
+
+The following invariants are part of the package contract and must be protected
+by tests.
+
+1. Denominator preservation: `nrow(nrd_link_readmissions(output))` equals the
+   input row count.
+2. Year scope: readmission linkage never crosses `YEAR`.
+3. Gap formula correctness: readmitted `time_to_event` equals exactly
+   `NRD_DAYSTOEVENT_readmit - NRD_DAYSTOEVENT_index - LOS_index`.
+4. First-only linkage: only the smallest-gap readmission is linked; ties break
+   by smallest `NRD_DAYSTOEVENT_cand`, then smallest `KEY_NRD_cand`.
+5. Index censoring: no row with
+   `DMONTH > 12 - ceiling(window / 30)` has `IndexEvent == 1L`.
+6. Death exclusion: `DIED == 1` at the index stay produces
+   `outcome_status == "Died at Index"`, and dead patients are never index
+   events.
+7. Regex correctness: diagnosis and procedure regex matching is applied to the
+   actual data columns, not to a truncated static code list.
+8. Survey domain correctness: `srvyr::filter()` domain analysis on the survey
+   object matches `survey::subset()` on the equivalent in-memory design.
+9. Lazy execution: `nrd_prepare()`, `nrd_flag_condition()`, and `nrd_select()`
+   never call `collect()`.
+10. Readmission checkpointing: `nrd_link_readmissions()` uses
+    `dplyr::compute()` internally but never calls `collect()`.
+11. SQL snapshot stability: snapshot tests cover `nrd_flag_condition()` in both
+    pattern and codes modes and cover `nrd_link_readmissions()` SQL rendering.
+12. SQL mode isolation: pattern-mode SQL must not contain `IN (...)`, and
+    codes-mode SQL must not contain regex SQL such as `regexp_matches`.
+
+# Test Fixture Requirements
+
+The synthetic test helper must exercise the real ingest path.
+
+- `make_synthetic_nrd()` writes a parquet file with
+  `arrow::write_parquet()`.
+- The helper returns a file path, not an in-memory tibble.
+- Tests clean up with `on.exit(unlink(path), add = TRUE)`.
+
+This ensures ingest tests exercise real Arrow-to-DuckDB registration, fresh
+connection setup, temp-directory configuration, and insertion-order settings.
+
+# File and Surface Discipline
+
+The alpha rewrite keeps only the minimal file surface needed to support the
+specified API and tests.
+
+- `sysdata.rda` contains only `nrd_dict`.
+- `globals.R` lists only names referenced by the surviving code.
+- Every public function has a complete roxygen block with examples.
+- Every internal helper uses the `.nrd_` prefix and has a short explanatory
+  comment.
+- No public pipeline function calls `collect()` except the intentional eager
+  pass inside `nrd_as_survey()` for degree-of-freedom calculation.
+
+# Success Criteria
+
+The rewrite is complete only when the implementation matches this contract,
+deleted surfaces are gone, tests protect the invariants above, and the package
+passes `R CMD check` with zero errors, zero warnings, and zero notes other than
+the accepted global-variable pattern handled through `globals.R`.
