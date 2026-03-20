@@ -1,71 +1,38 @@
-#' Select Analytical Variables with Protected NRD Design Columns
+#' Select analytical variables while preserving core NRD identifiers
 #'
-#' `nrd_select()` applies projection pushdown early in the NRD pipeline so only
-#' required analytical variables are carried forward to DuckDB materialization.
-#' This reduces memory pressure and disk I/O for wide NRD extracts.
+#' `nrd_select()` keeps linkage-critical identifiers, retains common analysis
+#' columns when present, and appends user-selected variables.
 #'
-#' The function always retains core architecture variables needed for episode
-#' linkage and complex survey design, even if they are not explicitly requested:
-#' `YEAR`, `NRD_VISITLINK`, `Episode_ID`, `HOSP_NRD`, `DISCWT`, and
-#' `NRD_STRATUM`.
+#' @param data A lazy table or in-memory data frame.
+#' @param ... <[`tidy-select`][dplyr::dplyr_tidy_select]> Columns to append.
 #'
-#' If readmission linkage or timing variables are present in `.data`, they are
-#' also retained automatically to prevent pipeline failures:
-#' `Episode_KEY_NRD`, `Episode_Admission_Day`, `Episode_Discharge_Day`,
-#' `Episode_DMONTH`, `DIED`, `IndexEvent`, `Readmit`, `DaysToReadmit`,
-#' `time_to_event`, and `outcome_status`.
-#'
-#' @param .data A data frame, lazy table, or Arrow query.
-#' @param ... <[`tidy-select`][dplyr::dplyr_tidy_select]> Columns to keep.
-#'   Supports unquoted column names and selection helpers, including character
-#'   vectors returned by `nrd_demographics()` and `nrd_hospital_vars()`.
-#'
-#' @returns A subsetted object of the same backend class as `.data`.
+#' @returns An object of the same backend class with selected columns.
 #' @export
 #'
 #' @examples
 #' if (FALSE) {
-#'   nrd_ingest("/path/to/nrd.parquet") |>
-#'     nrd_build_episodes() |>
-#'     nrd_select(is_ami, nrd_demographics(), nrd_hospital_vars()) |>
-#'     nrd_export("/path/to/analysis_subset.parquet")
+#'   data <- nrd_ingest("/path/to/nrd.parquet")
+#'   nrd_select(data, nrd_demographics(), nrd_hospital_vars())
 #' }
-nrd_select <- function(.data, ...) {
-  mandatory_vars <- c(
-    "YEAR",
-    "NRD_VISITLINK",
-    "Episode_ID",
-    "HOSP_NRD",
-    "DISCWT",
-    "NRD_STRATUM"
-  )
+nrd_select <- function(data, ...) {
+  .nrd_assert_cols(data, c("YEAR", "NRD_VISITLINK", "KEY_NRD"))
 
-  conditional_vars <- c(
-    "IndexEvent",
-    "time_to_event",
-    "outcome_status",
-    "Episode_KEY_NRD",
-    "Episode_Admission_Day",
-    "Episode_Discharge_Day",
-    "Episode_DMONTH",
-    "DIED",
-    "DaysToReadmit",
-    "Readmit"
+  retained_core <- c("YEAR", "NRD_VISITLINK", "KEY_NRD")
+  retained_optional <- c(
+    "HOSP_NRD", "DISCWT", "NRD_STRATUM", "IndexEvent", "time_to_event",
+    "outcome_status", "Discharge_Day", "DMONTH", "DIED",
+    "NRD_DAYSTOEVENT", "LOS"
   )
 
   dplyr::select(
-    .data,
-    dplyr::all_of(mandatory_vars),
-    dplyr::any_of(conditional_vars),
+    data,
+    dplyr::all_of(retained_core),
+    dplyr::any_of(retained_optional),
     ...
   )
 }
 
-#' Standard NRD Demographic Variable Names
-#'
-#' Returns the standard NRD demographic variables as a character vector.
-#' Use inside `nrd_select()`, `dplyr::select()`, or with
-#' `tidyselect::any_of()` when some variables may be absent.
+#' Return standard NRD demographic variables
 #'
 #' @returns A character vector of demographic variable names.
 #' @export
@@ -76,13 +43,9 @@ nrd_demographics <- function() {
   c("AGE", "FEMALE", "ZIPINC_QRTL", "PAY1", "RESIDENT", "PL_NCHS")
 }
 
-#' Standard NRD Hospital Structural Variable Names
+#' Return standard NRD hospital structural variables
 #'
-#' Returns the standard NRD hospital structural variables as a character vector.
-#' Use inside `nrd_select()`, `dplyr::select()`, or with
-#' `tidyselect::any_of()` when some variables may be absent.
-#'
-#' @returns A character vector of hospital structural variable names.
+#' @returns A character vector of hospital variable names.
 #' @export
 #'
 #' @examples

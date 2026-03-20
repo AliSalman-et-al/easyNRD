@@ -2,17 +2,15 @@
 % Please edit documentation in R/select.R
 \name{nrd_hospital_vars}
 \alias{nrd_hospital_vars}
-\title{Standard NRD Hospital Structural Variable Names}
+\title{Return standard NRD hospital structural variables}
 \usage{
 nrd_hospital_vars()
 }
 \value{
-A character vector of hospital structural variable names.
+A character vector of hospital variable names.
 }
 \description{
-Returns the standard NRD hospital structural variables as a character vector.
-Use inside \code{nrd_select()}, \code{dplyr::select()}, or with
-\code{tidyselect::any_of()} when some variables may be absent.
+Return standard NRD hospital structural variables
 }
 \examples{
 nrd_hospital_vars()

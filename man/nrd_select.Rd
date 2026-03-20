@@ -2,42 +2,25 @@
 % Please edit documentation in R/select.R
 \name{nrd_select}
 \alias{nrd_select}
-\title{Select Analytical Variables with Protected NRD Design Columns}
+\title{Select analytical variables while preserving core NRD identifiers}
 \usage{
-nrd_select(.data, ...)
+nrd_select(data, ...)
 }
 \arguments{
-\item{.data}{A data frame, lazy table, or Arrow query.}
+\item{data}{A lazy table or in-memory data frame.}
 
-\item{...}{<\code{\link[dplyr:dplyr_tidy_select]{tidy-select}}> Columns to keep.
-Supports unquoted column names and selection helpers, including character
-vectors returned by \code{nrd_demographics()} and \code{nrd_hospital_vars()}.}
+\item{...}{<\code{\link[dplyr:dplyr_tidy_select]{tidy-select}}> Columns to append.}
 }
 \value{
-A subsetted object of the same backend class as \code{.data}.
+An object of the same backend class with selected columns.
 }
 \description{
-\code{nrd_select()} applies projection pushdown early in the NRD pipeline so only
-required analytical variables are carried forward to DuckDB materialization.
-This reduces memory pressure and disk I/O for wide NRD extracts.
-}
-\details{
-The function always retains core architecture variables needed for episode
-linkage and complex survey design, even if they are not explicitly requested:
-\code{YEAR}, \code{NRD_VISITLINK}, \code{Episode_ID}, \code{HOSP_NRD}, \code{DISCWT}, and
-\code{NRD_STRATUM}.
-
-If readmission linkage or timing variables are present in \code{.data}, they are
-also retained automatically to prevent pipeline failures:
-\code{Episode_KEY_NRD}, \code{Episode_Admission_Day}, \code{Episode_Discharge_Day},
-\code{Episode_DMONTH}, \code{DIED}, \code{IndexEvent}, \code{Readmit}, \code{DaysToReadmit},
-\code{time_to_event}, and \code{outcome_status}.
+\code{nrd_select()} keeps linkage-critical identifiers, retains common analysis
+columns when present, and appends user-selected variables.
 }
 \examples{
 if (FALSE) {
-  nrd_ingest("/path/to/nrd.parquet") |>
-    nrd_build_episodes() |>
-    nrd_select(is_ami, nrd_demographics(), nrd_hospital_vars()) |>
-    nrd_export("/path/to/analysis_subset.parquet")
+  data <- nrd_ingest("/path/to/nrd.parquet")
+  nrd_select(data, nrd_demographics(), nrd_hospital_vars())
 }
 }

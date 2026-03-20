@@ -2,7 +2,7 @@
 % Please edit documentation in R/select.R
 \name{nrd_demographics}
 \alias{nrd_demographics}
-\title{Standard NRD Demographic Variable Names}
+\title{Return standard NRD demographic variables}
 \usage{
 nrd_demographics()
 }
@@ -10,9 +10,7 @@ nrd_demographics()
 A character vector of demographic variable names.
 }
 \description{
-Returns the standard NRD demographic variables as a character vector.
-Use inside \code{nrd_select()}, \code{dplyr::select()}, or with
-\code{tidyselect::any_of()} when some variables may be absent.
+Return standard NRD demographic variables
 }
 \examples{
 nrd_demographics()

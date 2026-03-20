@@ -1,93 +1,73 @@
-test_that("nrd_select retains mandatory and conditional variables when present", {
+test_that("nrd_select errors when YEAR, NRD_VISITLINK, or KEY_NRD is absent", {
+  missing_year <- tibble::tibble(NRD_VISITLINK = "A001", KEY_NRD = 1L)
+  missing_visitlink <- tibble::tibble(YEAR = 2019L, KEY_NRD = 1L)
+  missing_key <- tibble::tibble(YEAR = 2019L, NRD_VISITLINK = "A001")
+
+  expect_error(nrd_select(missing_year), "YEAR")
+  expect_error(nrd_select(missing_visitlink), "NRD_VISITLINK")
+  expect_error(nrd_select(missing_key), "KEY_NRD")
+})
+
+test_that("nrd_select omits missing survey-design columns without error", {
   dat <- tibble::tibble(
     YEAR = 2019L,
     NRD_VISITLINK = "A0001",
-    Episode_ID = 1L,
+    KEY_NRD = 1L,
+    value = 5L
+  )
+
+  expect_no_error(out <- nrd_select(dat, value))
+  expect_identical(names(out), c("YEAR", "NRD_VISITLINK", "KEY_NRD", "value"))
+})
+
+test_that("nrd_select omits missing linkage-derived columns without error", {
+  dat <- tibble::tibble(
+    YEAR = 2019L,
+    NRD_VISITLINK = "A0001",
+    KEY_NRD = 1L,
+    extra = 99L
+  )
+
+  expect_no_error(out <- nrd_select(dat, extra))
+  expect_identical(names(out), c("YEAR", "NRD_VISITLINK", "KEY_NRD", "extra"))
+})
+
+test_that("user-selected columns are appended after retained columns", {
+  dat <- tibble::tibble(
+    YEAR = 2019L,
+    NRD_VISITLINK = "A0001",
+    KEY_NRD = 1L,
     HOSP_NRD = 101L,
     DISCWT = 2.5,
     NRD_STRATUM = 11L,
-    Episode_KEY_NRD = 10001L,
-    Episode_Admission_Day = 10L,
-    Episode_Discharge_Day = 12L,
-    Episode_DMONTH = 1L,
-    DIED = 0L,
     IndexEvent = 1L,
-    Readmit = 1L,
-    DaysToReadmit = 7L,
-    time_to_event = 12,
+    time_to_event = 7,
     outcome_status = "Readmitted",
-    Episode_DX10 = "I214",
-    Episode_PR10 = "02703ZZ",
-    some_noise_var = 1
+    DMONTH = 1L,
+    DIED = 0L,
+    NRD_DAYSTOEVENT = 5L,
+    LOS = 2L,
+    custom_a = 10L,
+    custom_b = 11L
   )
 
-  out <- dat |>
-    nrd_select(some_noise_var)
+  out <- nrd_select(dat, custom_a, custom_b)
 
-  expected <- c(
-    "YEAR",
-    "NRD_VISITLINK",
-    "Episode_ID",
-    "HOSP_NRD",
-    "DISCWT",
-    "NRD_STRATUM",
-    "IndexEvent",
-    "time_to_event",
-    "outcome_status",
-    "Episode_KEY_NRD",
-    "Episode_Admission_Day",
-    "Episode_Discharge_Day",
-    "Episode_DMONTH",
-    "DIED",
-    "DaysToReadmit",
-    "Readmit",
-    "some_noise_var"
+  expect_identical(
+    names(out),
+    c(
+      "YEAR", "NRD_VISITLINK", "KEY_NRD", "HOSP_NRD", "DISCWT",
+      "NRD_STRATUM", "IndexEvent", "time_to_event", "outcome_status",
+      "DMONTH", "DIED", "NRD_DAYSTOEVENT", "LOS", "custom_a", "custom_b"
+    )
   )
-
-  expect_identical(names(out), expected)
-  expect_false("Episode_DX10" %in% names(out))
-  expect_false("Episode_PR10" %in% names(out))
 })
 
-test_that("nrd_select works when conditional variables are absent", {
+test_that("nrd_demographics and nrd_hospital_vars work as helpers inside nrd_select", {
   dat <- tibble::tibble(
     YEAR = 2019L,
     NRD_VISITLINK = "A0001",
-    Episode_ID = 1L,
-    HOSP_NRD = 101L,
-    DISCWT = 2.5,
-    NRD_STRATUM = 11L,
-    Episode_DX10 = "I214",
-    some_noise_var = 1
-  )
-
-  expect_no_error({
-    out <- dat |>
-      nrd_select(some_noise_var)
-  })
-
-  expected <- c(
-    "YEAR",
-    "NRD_VISITLINK",
-    "Episode_ID",
-    "HOSP_NRD",
-    "DISCWT",
-    "NRD_STRATUM",
-    "some_noise_var"
-  )
-
-  expect_identical(names(out), expected)
-  expect_false("Episode_DX10" %in% names(out))
-})
-
-test_that("nrd_demographics and nrd_hospital_vars work in nrd_select", {
-  dat <- tibble::tibble(
-    YEAR = 2019L,
-    NRD_VISITLINK = "A0001",
-    Episode_ID = 1L,
-    HOSP_NRD = 101L,
-    DISCWT = 2.5,
-    NRD_STRATUM = 11L,
+    KEY_NRD = 1L,
     AGE = 68L,
     FEMALE = 1L,
     ZIPINC_QRTL = 3L,
@@ -97,13 +77,34 @@ test_that("nrd_demographics and nrd_hospital_vars work in nrd_select", {
     HOSP_BEDSIZE = "LARGE",
     H_CONTRL = 2L,
     HOSP_URCAT4 = 1L,
-    HOSP_UR_TEACH = 3L,
-    dummy_001 = 1
+    HOSP_UR_TEACH = 3L
   )
 
-  out <- dat |>
-    nrd_select(nrd_demographics(), nrd_hospital_vars())
+  out <- nrd_select(dat, nrd_demographics(), nrd_hospital_vars())
 
   expect_true(all(nrd_demographics() %in% names(out)))
   expect_true(all(nrd_hospital_vars() %in% names(out)))
+})
+
+test_that("nrd_select works on both lazy DuckDB tables and in-memory data frames", {
+  dat <- tibble::tibble(
+    YEAR = 2019L,
+    NRD_VISITLINK = "A0001",
+    KEY_NRD = 1L,
+    HOSP_NRD = 101L,
+    custom = 5L
+  )
+
+  in_memory <- nrd_select(dat, custom)
+  expect_s3_class(in_memory, "data.frame")
+
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  lazy <- nrd_ingest(path)
+  on.exit(nrd_close(lazy), add = TRUE)
+
+  lazy_out <- nrd_select(lazy, custom)
+  expect_s3_class(lazy_out, "tbl_lazy")
+  expect_equal(dplyr::collect(lazy_out), in_memory)
 })
