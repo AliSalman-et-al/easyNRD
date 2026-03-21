@@ -4,3 +4,4 @@
 - Narrowed the internal `nrd_link_readmissions()` linkage checkpoint to materialize only join-critical columns plus requested `readmit_vars`, while preserving the full denominator and original output column surface.
 - Broke `nrd_link_readmissions()` first-readmission ranking into sequential checkpointed stages so the `gap`, `DTE_cand`, and final key tie-break passes no longer stack multiple blocking window operators in a single DuckDB plan.
 - Added optional environment- and option-driven DuckDB thread and memory settings during `nrd_ingest()`, plus `EASYNRD_VERBOSE=1` checkpoint logging for linkage profiling.
+- Finalized the standalone benchmark harness and added a performance vignette documenting linkage bottlenecks, checkpoint strategy, hardware tuning, parquet preparation guidance, and benchmark usage.

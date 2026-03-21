@@ -1,14 +1,18 @@
 #!/usr/bin/env Rscript
 
-# easyNRD performance benchmark harness
+# easyNRD benchmark harness
 #
-# Run from the repository root with:
+# Usage:
 #   Rscript data-raw/benchmarks/benchmark_pipeline.R
 #
-# The script writes benchmark artifacts under data-raw/benchmarks/artifacts/
-# and prints a console summary table with bench timings, wall-clock runtime,
-# row counts, and a simple disk-spill indicator derived from the DuckDB
-# temp_directory contents.
+# What it does:
+# - generates synthetic NRD parquet fixtures at 100K and 1M rows
+# - benchmarks each lazy pipeline stage and the full end-to-end pipeline
+# - profiles nrd_link_readmissions() on the 100K fixture with profvis
+# - writes self-describing artifacts under data-raw/benchmarks/artifacts/
+#
+# This script is developer tooling only. It is not sourced by tests and is not
+# executed during vignette builds or R CMD check.
 
 required_packages <- c(
   "arrow",
@@ -19,9 +23,7 @@ required_packages <- c(
   "duckdb",
   "htmlwidgets",
   "profvis",
-  "rlang",
-  "tibble",
-  "tidyselect"
+  "tibble"
 )
 
 missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
@@ -49,9 +51,14 @@ r_files <- sort(list.files(file.path(repo_root, "R"), pattern = "\\.R$", full.na
 invisible(lapply(r_files, source, local = globalenv()))
 
 timestamp <- format(Sys.time(), "%Y%m%d-%H%M%S")
-artifact_dir <- file.path(repo_root, "data-raw", "benchmarks", "artifacts", timestamp)
+artifact_root <- file.path(repo_root, "data-raw", "benchmarks", "artifacts")
+artifact_dir <- file.path(artifact_root, paste0("benchmark_run_", timestamp))
 fixture_dir <- file.path(artifact_dir, "fixtures")
+profile_dir <- file.path(artifact_dir, "profiles")
+results_dir <- file.path(artifact_dir, "results")
 dir.create(fixture_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(profile_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
 
 stage_iterations <- c(medium = 3L, large = 1L)
 stage_order <- c(
@@ -64,6 +71,50 @@ stage_order <- c(
   "export",
   "end_to_end"
 )
+
+bytes_to_gb <- function(bytes) {
+  round(bytes / 1024^3, 2)
+}
+
+safe_available_ram_bytes <- function() {
+  if (.Platform$OS.type == "windows") {
+    cmd <- "powershell -NoProfile -Command \"$os = Get-CimInstance Win32_OperatingSystem; [Console]::WriteLine([int64]$os.FreePhysicalMemory * 1024)\""
+    value <- tryCatch(system(cmd, intern = TRUE), warning = function(w) NA_character_, error = function(e) NA_character_)
+    value <- suppressWarnings(as.numeric(value[[1]]))
+    if (!is.na(value)) {
+      return(value)
+    }
+  }
+
+  if (file.exists("/proc/meminfo")) {
+    lines <- readLines("/proc/meminfo", warn = FALSE)
+    match_line <- grep("^MemAvailable:", lines, value = TRUE)
+    if (length(match_line) == 1) {
+      value <- suppressWarnings(as.numeric(gsub("[^0-9]", "", match_line)))
+      if (!is.na(value)) {
+        return(value * 1024)
+      }
+    }
+  }
+
+  NA_real_
+}
+
+report_session_header <- function() {
+  available_ram <- safe_available_ram_bytes()
+  ram_label <- if (is.na(available_ram)) "unavailable" else paste0(bytes_to_gb(available_ram), " GiB")
+  duckdb_version <- tryCatch({
+    con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+    DBI::dbGetQuery(con, "SELECT version() AS duckdb_version")$duckdb_version[[1]]
+  }, error = function(e) as.character(utils::packageVersion("duckdb")))
+
+  cat("Session summary:\n")
+  cat(sprintf("- R version: %s\n", R.version.string))
+  cat(sprintf("- DuckDB version: %s\n", duckdb_version))
+  cat(sprintf("- Physical cores: %s\n", .nrd_available_physical_cores()))
+  cat(sprintf("- Available RAM: %s\n", ram_label))
+}
 
 draw_patient_stay_sizes <- function(n_rows) {
   stay_sizes <- integer(0)
@@ -84,8 +135,8 @@ draw_patient_stay_sizes <- function(n_rows) {
   stay_sizes[stay_sizes > 0L]
 }
 
-chunk_path <- function(scale_name, chunk_id) {
-  file.path(fixture_dir, scale_name, sprintf("%s_%02d.parquet", scale_name, chunk_id))
+fixture_chunk_path <- function(scale_name, chunk_id) {
+  file.path(fixture_dir, scale_name, sprintf("%s_fixture_chunk_%02d.parquet", scale_name, chunk_id))
 }
 
 make_dx_column <- function(n, column_index) {
@@ -127,12 +178,7 @@ build_fixture_chunk <- function(patient_ids, stay_seq, key_start) {
   unique_patients <- unique(patient_ids)
   patient_index <- match(patient_ids, unique_patients)
   base_day_by_patient <- sample.int(300L, length(unique_patients), replace = TRUE)
-  step_by_patient <- sample(
-    3L:55L,
-    size = length(unique_patients),
-    replace = TRUE,
-    prob = exp(-(3L:55L) / 15)
-  )
+  step_by_patient <- sample(3L:55L, size = length(unique_patients), replace = TRUE, prob = exp(-(3L:55L) / 15))
 
   dte <- pmin.int(360L, base_day_by_patient[patient_index] + ((stay_seq - 1L) * step_by_patient[patient_index]))
   los <- sample(1L:7L, size = n, replace = TRUE, prob = c(0.20, 0.20, 0.18, 0.16, 0.12, 0.09, 0.05))
@@ -174,19 +220,14 @@ generate_fixture_paths <- function(scale_name, n_rows, chunk_rows) {
   chunk_ids <- ceiling(cumsum(stay_sizes) / chunk_rows)
   split_patients <- split(seq_len(n_patients), chunk_ids)
   key_start <- 1000000L
-
   paths <- character(length(split_patients))
 
   for (i in seq_along(split_patients)) {
     patient_chunk <- split_patients[[i]]
     idx <- patient_ids %in% patient_chunk
-    chunk <- build_fixture_chunk(
-      patient_ids = patient_ids[idx],
-      stay_seq = stay_seq[idx],
-      key_start = key_start
-    )
+    chunk <- build_fixture_chunk(patient_ids = patient_ids[idx], stay_seq = stay_seq[idx], key_start = key_start)
     key_start <- key_start + nrow(chunk)
-    paths[[i]] <- chunk_path(scale_name, i)
+    paths[[i]] <- fixture_chunk_path(scale_name, i)
     arrow::write_parquet(chunk, sink = paths[[i]])
   }
 
@@ -201,10 +242,7 @@ generate_fixture_paths <- function(scale_name, n_rows, chunk_rows) {
 
 get_temp_dir <- function(data) {
   con <- dbplyr::remote_con(data)
-  DBI::dbGetQuery(
-    con,
-    "SELECT current_setting('temp_directory') AS temp_directory"
-  )$temp_directory[[1]]
+  DBI::dbGetQuery(con, "SELECT current_setting('temp_directory') AS temp_directory")$temp_directory[[1]]
 }
 
 directory_size_bytes <- function(path) {
@@ -272,7 +310,7 @@ run_export_stage <- function(paths, export_name) {
 
   temp_dir <- get_temp_dir(data)
   before_bytes <- directory_size_bytes(temp_dir)
-  out_path <- file.path(artifact_dir, sprintf("%s.parquet", export_name))
+  out_path <- file.path(results_dir, sprintf("%s_output.parquet", export_name))
   nrd_export(data, out_path)
   rows <- arrow::open_dataset(out_path, format = "parquet") |>
     dplyr::summarise(rows = dplyr::n()) |>
@@ -309,8 +347,8 @@ stage_measurement <- function(stage_name, paths, scale_name, iterations) {
         ) |>
         nrd_select(HOSP_NRD, FEMALE, is_ami, has_revascularization, readmit_HOSP_NRD, readmit_FEMALE)
     }),
-    export = function() run_export_stage(paths, sprintf("export_%s", scale_name)),
-    end_to_end = function() run_export_stage(paths, sprintf("pipeline_%s", scale_name))
+    export = function() run_export_stage(paths, sprintf("%s_export", scale_name)),
+    end_to_end = function() run_export_stage(paths, sprintf("%s_end_to_end", scale_name))
   )
 
   wall_timer <- system.time(run_result <- run_once())[["elapsed"]]
@@ -352,12 +390,32 @@ profile_link_readmissions <- function(paths) {
       force_lazy_stage()
   }, interval = 0.01)
 
-  out_path <- file.path(artifact_dir, "profvis_link_readmissions_medium.html")
+  out_path <- file.path(profile_dir, "profvis_link_readmissions_medium.html")
   htmlwidgets::saveWidget(profile, file = out_path, selfcontained = TRUE)
   out_path
 }
 
-cat("Generating synthetic benchmark fixtures...\n")
+write_manifest <- function(fixture_summary, benchmark_table, profvis_path) {
+  manifest_path <- file.path(results_dir, "benchmark_manifest.txt")
+  lines <- c(
+    sprintf("run_id: benchmark_run_%s", timestamp),
+    sprintf("created_at: %s", format(Sys.time(), tz = "UTC", usetz = TRUE)),
+    sprintf("script: %s", normalizePath(script_path, winslash = "/", mustWork = TRUE)),
+    sprintf("profvis_html: %s", normalizePath(profvis_path, winslash = "/", mustWork = TRUE)),
+    sprintf("benchmark_csv: %s", normalizePath(file.path(results_dir, "benchmark_summary.csv"), winslash = "/", mustWork = TRUE)),
+    sprintf("benchmark_rds: %s", normalizePath(file.path(results_dir, "benchmark_summary.rds"), winslash = "/", mustWork = TRUE)),
+    "",
+    "fixture_summary:",
+    paste(capture.output(print(fixture_summary)), collapse = "\n"),
+    "",
+    "benchmark_summary:",
+    paste(capture.output(print(benchmark_table)), collapse = "\n")
+  )
+  writeLines(lines, con = manifest_path)
+}
+
+report_session_header()
+cat("\nGenerating synthetic benchmark fixtures...\n")
 
 fixtures <- list(
   medium = generate_fixture_paths("medium", n_rows = 100000L, chunk_rows = 20000L),
@@ -392,8 +450,8 @@ for (scale_name in names(fixtures)) {
 benchmark_table <- dplyr::bind_rows(benchmark_rows) |>
   dplyr::arrange(factor(scale, levels = c("medium", "large")), factor(stage, levels = stage_order))
 
-csv_path <- file.path(artifact_dir, sprintf("benchmark_results_%s.csv", timestamp))
-rds_path <- file.path(artifact_dir, sprintf("benchmark_results_%s.rds", timestamp))
+csv_path <- file.path(results_dir, "benchmark_summary.csv")
+rds_path <- file.path(results_dir, "benchmark_summary.rds")
 utils::write.csv(benchmark_table, file = csv_path, row.names = FALSE)
 saveRDS(benchmark_table, file = rds_path)
 
@@ -422,9 +480,12 @@ console_summary <- benchmark_table |>
     spill_mb
   )
 
+write_manifest(fixture_summary, console_summary, profvis_path)
+
 cat("\nBenchmark summary:\n")
 print(console_summary, n = nrow(console_summary))
 
-cat(sprintf("\nCSV results: %s\n", normalizePath(csv_path, winslash = "/", mustWork = TRUE)))
-cat(sprintf("RDS results: %s\n", normalizePath(rds_path, winslash = "/", mustWork = TRUE)))
-cat(sprintf("profvis HTML: %s\n", normalizePath(profvis_path, winslash = "/", mustWork = TRUE)))
+cat(sprintf("\nResults CSV: %s\n", normalizePath(csv_path, winslash = "/", mustWork = TRUE)))
+cat(sprintf("Results RDS: %s\n", normalizePath(rds_path, winslash = "/", mustWork = TRUE)))
+cat(sprintf("Profile HTML: %s\n", normalizePath(profvis_path, winslash = "/", mustWork = TRUE)))
+cat(sprintf("Manifest: %s\n", normalizePath(file.path(results_dir, "benchmark_manifest.txt"), winslash = "/", mustWork = TRUE)))

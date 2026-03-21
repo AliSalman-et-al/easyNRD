@@ -1,0 +1,197 @@
+---
+title: "easyNRD Performance"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{easyNRD Performance}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Overview
+
+The AHRQ Nationwide Readmissions Database (NRD) is an out-of-core workload by
+default. A single year is roughly 15-18 million discharge rows, and each row is
+wide: a typical analytical table includes core linkage columns, 40 diagnosis
+columns, 25 procedure columns, weights, strata, and user-defined phenotype
+flags.
+
+That combination creates three practical performance constraints:
+
+- the data are too large to load safely into R memory as data frames
+- readmission linkage is a patient-year self-join over a very wide table
+- ranking and tie-breaking introduce blocking SQL operators that can create
+  large intermediates
+
+`easyNRD` is designed around those constraints. The public pipeline stays lazy,
+pushes work into DuckDB, and uses explicit internal checkpoints only where they
+improve out-of-core stability.
+
+# Pipeline Bottleneck
+
+Across the current benchmark harness, `nrd_link_readmissions()` is the dominant
+pipeline stage. That is expected.
+
+Why it dominates:
+
+- it performs a self-join within `YEAR` and `NRD_VISITLINK`
+- it computes the HCUP gap formula for every candidate readmission pair
+- it applies ordered tie-breaking over the surviving candidate set
+- each ranking pass is a blocking operation from DuckDB's perspective
+
+By contrast, `nrd_prepare()` is a simple arithmetic mutate and
+`nrd_flag_condition()` stays cheap because predicate pushdown is already in good
+shape.
+
+`nrd_select()` and `nrd_export()` often appear expensive in wall-clock timings,
+but those timings mostly reflect deferred upstream execution. They are usually
+the point where DuckDB is finally forced to run the heavy linkage plan.
+
+# Checkpoint Strategy
+
+`easyNRD` now uses three deliberate internal `dplyr::compute()` checkpoints in
+the readmission path:
+
+1. a narrowed linkage checkpoint before the self-join
+2. a checkpoint after the `gap` ranking pass
+3. a checkpoint after the `DTE_cand` ranking pass
+
+The final `KEY_NRD_cand` tie-break remains lazy and returns the final map
+without another checkpoint.
+
+This is intentional. On small synthetic fixtures, extra checkpointing can add a
+little overhead. On real NRD-scale jobs, the benefit is that multiple blocking
+window operators are no longer stacked into a single large DuckDB plan. That is
+the key trade: slightly more small-data overhead in exchange for much better OOM
+safety when the candidate map becomes large.
+
+# Hardware Tuning
+
+`easyNRD` keeps tuning internal to connection setup. No public function gains
+extra arguments; all controls are environment-variable or option driven.
+
+## Threads
+
+Use either:
+
+- `EASYNRD_MAX_THREADS`
+- `options(easynrd.max_threads = ...)`
+
+Environment variables take precedence over options. Values must be positive
+integers. If you over-specify, `easyNRD` silently caps the request to the number
+of physical cores detected by `parallel::detectCores(logical = FALSE)`.
+
+```r
+Sys.setenv(EASYNRD_MAX_THREADS = "8")
+
+options(easynrd.max_threads = 8L)
+```
+
+## Memory Limit
+
+Use either:
+
+- `EASYNRD_MEMORY_LIMIT`
+- `options(easynrd.memory_limit = ...)`
+
+The value is passed through to DuckDB as `SET memory_limit = 'X'`.
+
+```r
+Sys.setenv(EASYNRD_MEMORY_LIMIT = "16GB")
+
+options(easynrd.memory_limit = "16GB")
+```
+
+## Verbose Checkpoint Logging
+
+Set `EASYNRD_VERBOSE=1` to emit checkpoint timing messages during linkage.
+
+```r
+Sys.setenv(EASYNRD_VERBOSE = "1")
+```
+
+When enabled, each internal checkpoint reports:
+
+- the checkpoint label
+- the row count after materialization
+- elapsed seconds
+
+This is useful while tuning hardware settings or diagnosing whether a job is
+spending time in the narrowed base checkpoint versus the sequential ranking
+passes.
+
+# Parquet File Preparation
+
+For analysts working with real NRD extracts, the most important performance work
+happens before the first `easyNRD` call.
+
+- stay parquet-native; never load NRD CSVs into R memory first
+- keep files year-scoped, because `NRD_VISITLINK` is valid only within year
+- ensure schema consistency across files for the same year
+- ensure adequate temp-disk space, ideally at least 2-3x the size of the
+  working dataset
+- treat `nrd_export()` output as the canonical downstream artifact for later
+  analysis, modeling, and survey work
+
+These practices help DuckDB stream data efficiently and reduce avoidable temp
+spill or schema-reconciliation overhead.
+
+# Benchmark Harness
+
+The developer benchmark harness lives at
+`data-raw/benchmarks/benchmark_pipeline.R`.
+
+It measures:
+
+- fixture generation at two scales: 100K rows and 1M rows
+- each major lazy pipeline stage independently
+- the full end-to-end pipeline
+- wall-clock time, `bench::mark()` timing, memory allocation, and basic temp-disk
+  spill signals
+- a `profvis` profile of `nrd_link_readmissions()` on the medium fixture
+
+Run it from the repository root:
+
+```{r benchmark-command, eval = FALSE}
+Rscript data-raw/benchmarks/benchmark_pipeline.R
+```
+
+Sample console summary:
+
+```text
+Session summary:
+- R version: R version 4.5.3 (2026-03-11 ucrt)
+- DuckDB package: 1.4.1
+- Physical cores: 8
+- Available RAM: 25.1 GiB
+
+Fixture summary:
+# A tibble: 2 x 5
+  scale   rows patients mean_stays_per_patient max_stays_per_patient
+  medium 1e+05    34005                   2.94                     8
+  large  1e+06   337706                   2.96                     8
+```
+
+The benchmark script is intentionally not executed during vignette builds.
+Chunks that run the benchmark are marked `eval = FALSE`, and any code that does
+run during render is lightweight.
+
+# Practical Reading of Results
+
+When you review benchmark output, focus on these questions:
+
+- does `nrd_link_readmissions()` still dominate the pipeline?
+- did a change reduce temp spill or shrink intermediate row counts?
+- did a hardware setting materially improve the linkage stage?
+- did a change only help small synthetic data, or does it actually reduce
+  large-scale risk?
+
+For `easyNRD`, the most important wins are often stability wins rather than
+small-data speed wins. A slightly slower 100K fixture can still be the right
+trade if it prevents memory blowups at 15-18 million rows.
