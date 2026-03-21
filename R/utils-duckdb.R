@@ -93,6 +93,28 @@
   data
 }
 
+# Check whether verbose linkage checkpoint logging is enabled.
+.nrd_verbose_enabled <- function() {
+  identical(Sys.getenv("EASYNRD_VERBOSE", unset = ""), "1")
+}
+
+# Materialize a lazy table, optionally logging checkpoint timing and row count.
+.nrd_compute_checkpoint <- function(data, label) {
+  start <- proc.time()[["elapsed"]]
+  out <- dplyr::compute(data)
+
+  if (.nrd_verbose_enabled()) {
+    rows <- out |>
+      dplyr::summarise(.nrd_rows = dplyr::n()) |>
+      dplyr::collect() |>
+      dplyr::pull(.nrd_rows)
+    elapsed <- proc.time()[["elapsed"]] - start
+    message(sprintf("[%s] rows=%s elapsed=%.3fs", label, rows, elapsed))
+  }
+
+  out
+}
+
 # Preserve the legacy helper for resolving readmission variable selections.
 .nrd_resolve_readmit_vars <- function(data, readmit_vars) {
   vars_quo <- rlang::enquo(readmit_vars)

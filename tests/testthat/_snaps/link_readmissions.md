@@ -66,73 +66,11 @@
             severity AS readmit_severity
           FROM (
             SELECT
-              "YEAR",
-              NRD_VISITLINK,
-              KEY_NRD_idx,
-              DTE_idx,
-              LOS_idx,
-              KEY_NRD_cand,
-              DTE_cand,
-              KEY_NRD,
-              severity,
-              gap,
-              ROW_NUMBER() OVER (PARTITION BY "YEAR", NRD_VISITLINK, KEY_NRD_idx ORDER BY KEY_NRD_cand) AS col03
-            FROM (
-              SELECT
-                "YEAR",
-                NRD_VISITLINK,
-                KEY_NRD_idx,
-                DTE_idx,
-                LOS_idx,
-                KEY_NRD_cand,
-                DTE_cand,
-                KEY_NRD,
-                severity,
-                gap,
-                RANK() OVER (PARTITION BY "YEAR", NRD_VISITLINK, KEY_NRD_idx ORDER BY DTE_cand) AS col02
-              FROM (
-                SELECT
-                  q01.*,
-                  RANK() OVER (PARTITION BY "YEAR", NRD_VISITLINK, KEY_NRD_idx ORDER BY gap) AS col01
-                FROM (
-                  SELECT q01.*, (DTE_cand - DTE_idx) - LOS_idx AS gap
-                  FROM (
-                    SELECT LHS.*, KEY_NRD_cand, DTE_cand, KEY_NRD, severity
-                    FROM (
-                      SELECT
-                        "YEAR",
-                        NRD_VISITLINK,
-                        KEY_NRD AS KEY_NRD_idx,
-                        NRD_DAYSTOEVENT AS DTE_idx,
-                        LOS AS LOS_idx
-                      FROM checkpoint_tbl
-                      WHERE (IndexEvent = 1)
-                    ) LHS
-                    INNER JOIN (
-                      SELECT
-                        "YEAR",
-                        NRD_VISITLINK,
-                        KEY_NRD AS KEY_NRD_cand,
-                        NRD_DAYSTOEVENT AS DTE_cand,
-                        KEY_NRD,
-                        severity
-                      FROM checkpoint_tbl
-                      WHERE (".nrd_readmit_eligible")
-                    ) RHS
-                      ON (
-                        LHS."YEAR" = RHS."YEAR" AND
-                        LHS.NRD_VISITLINK = RHS.NRD_VISITLINK
-                      )
-                  ) q01
-                  WHERE (KEY_NRD_cand != KEY_NRD_idx)
-                ) q01
-                WHERE (gap >= 1) AND (gap <= 30)
-              ) q01
-              WHERE (col01 <= 1)
-            ) q01
-            WHERE (col02 <= 1)
+              checkpoint_tbl.*,
+              ROW_NUMBER() OVER (PARTITION BY "YEAR", NRD_VISITLINK, KEY_NRD_idx ORDER BY KEY_NRD_cand) AS col01
+            FROM checkpoint_tbl
           ) q01
-          WHERE (col03 <= 1)
+          WHERE (col01 <= 1)
         ) RHS
           ON (
             LHS."YEAR" = RHS."YEAR" AND
@@ -140,3 +78,4 @@
             LHS.KEY_NRD = RHS.KEY_NRD_idx
           )
       ) q01
+

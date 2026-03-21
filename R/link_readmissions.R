@@ -51,7 +51,7 @@
       .nrd_readmit_eligible,
       dplyr::any_of(readmit_vars)
     ) |>
-    dplyr::compute()
+    .nrd_compute_checkpoint(label = "link_base")
 }
 
 # Create the index pool with only the columns needed for the self-join.
@@ -87,7 +87,7 @@
 
 # Keep the first qualifying readmission for each index discharge.
 .nrd_first_readmission <- function(index_pool, candidate_pool, window) {
-  index_pool |>
+  stage_a <- index_pool |>
     dplyr::inner_join(
       candidate_pool,
       by = c("YEAR", "NRD_VISITLINK"),
@@ -96,9 +96,18 @@
     dplyr::filter(KEY_NRD_cand != KEY_NRD_idx) |>
     dplyr::mutate(gap = DTE_cand - DTE_idx - LOS_idx) |>
     dplyr::filter(gap >= 1L, gap <= window) |>
-    dplyr::group_by(YEAR, NRD_VISITLINK, KEY_NRD_idx) |>
+    dplyr::group_by(YEAR, NRD_VISITLINK, KEY_NRD_idx)
+
+  stage_b <- stage_a |>
     dplyr::slice_min(order_by = gap, n = 1L, with_ties = TRUE) |>
+    .nrd_compute_checkpoint(label = "first_readmission_gap")
+
+  stage_c <- stage_b |>
     dplyr::slice_min(order_by = DTE_cand, n = 1L, with_ties = TRUE) |>
+    .nrd_compute_checkpoint(label = "first_readmission_day")
+
+  stage_c |>
+    dplyr::group_by(YEAR, NRD_VISITLINK, KEY_NRD_idx) |>
     dplyr::slice_min(order_by = KEY_NRD_cand, n = 1L, with_ties = FALSE) |>
     dplyr::ungroup()
 }

@@ -147,8 +147,9 @@ The package is designed around DuckDB-backed lazy execution.
 - The package never uses `PIVOT`, `string_agg()`, or `list()` aggregates in SQL
   generation.
 - Expensive joins should project and filter early.
-- `dplyr::compute()` is used deliberately as a checkpoint before the
-  readmission self-join.
+- `dplyr::compute()` checkpoints are used deliberately inside DuckDB before and
+  between blocking readmission-linkage stages to reduce intermediate plan
+  width and break up stacked window operators.
 
 # Function Contracts
 
@@ -246,7 +247,8 @@ is_index_eligible = DMONTH <= 12L - ceiling(window / 30L)
 IndexEvent = is_index_eligible & DIED == 0L & (!!index_condition)
 ```
 
-3. Materialize the annotated base table with `dplyr::compute()` inside DuckDB.
+3. Materialize a narrowed linkage checkpoint with `dplyr::compute()` inside
+   DuckDB before the self-join.
 4. Create an index pool containing only index rows and only the columns needed
    for linkage.
 5. Create a candidate pool containing rows satisfying `readmit_condition`, with
@@ -265,7 +267,11 @@ gap = DTE_cand - DTE_idx - LOS_idx
     - smallest `gap`
     - then smallest `DTE_cand`
     - then smallest `KEY_NRD_cand`
-11. Left join the first-readmission map back to the checkpointed full table.
+11. Materialize sequential checkpoint tables between the `gap` ranking pass and
+    the `DTE_cand` ranking pass so each blocking window stage runs in its own
+    DuckDB query plan.
+12. Left join the first-readmission map back to the full annotated denominator
+    table.
 
 Output contract:
 
@@ -448,8 +454,9 @@ by tests.
    object matches `survey::subset()` on the equivalent in-memory design.
 9. Lazy execution: `nrd_prepare()`, `nrd_flag_condition()`, and `nrd_select()`
    never call `collect()`.
-10. Readmission checkpointing: `nrd_link_readmissions()` uses
-    `dplyr::compute()` internally but never calls `collect()`.
+10. Readmission checkpointing: `nrd_link_readmissions()` uses multiple
+    deliberate internal `dplyr::compute()` checkpoints but never calls
+    `collect()`.
 11. SQL snapshot stability: snapshot tests cover `nrd_flag_condition()` in both
     pattern and codes modes and cover `nrd_link_readmissions()` SQL rendering.
 12. SQL mode isolation: pattern-mode SQL must not contain `IN (...)`, and

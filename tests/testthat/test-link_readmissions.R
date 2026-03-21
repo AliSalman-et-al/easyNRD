@@ -428,29 +428,44 @@ test_that("nrd_link_readmissions stays lazy and uses a DuckDB compute checkpoint
   on.exit(nrd_close(data), add = TRUE)
 
   compute_calls <- 0L
-  original_compute <- dplyr::compute
+  original_checkpoint <- .nrd_compute_checkpoint
+  old_verbose <- Sys.getenv("EASYNRD_VERBOSE", unset = NA_character_)
+  Sys.unsetenv("EASYNRD_VERBOSE")
+  on.exit(
+    {
+      if (is.na(old_verbose)) {
+        Sys.unsetenv("EASYNRD_VERBOSE")
+      } else {
+        Sys.setenv(EASYNRD_VERBOSE = old_verbose)
+      }
+    },
+    add = TRUE
+  )
 
   out <- testthat::with_mocked_bindings(
-    nrd_link_readmissions(
-      data,
-      index_condition = is_index == 1L,
-      readmit_condition = is_readmit == 1L,
-      window = 30L
+    testthat::with_mocked_bindings(
+      nrd_link_readmissions(
+        data,
+        index_condition = is_index == 1L,
+        readmit_condition = is_readmit == 1L,
+        window = 30L
+      ),
+      collect = function(...) {
+        stop("collect should not be called")
+      },
+      .package = "dplyr"
     ),
-    compute = function(x, ...) {
+    .nrd_compute_checkpoint = function(x, label, ...) {
       compute_calls <<- compute_calls + 1L
-      result <- original_compute(x, ...)
+      result <- original_checkpoint(x, label = label, ...)
       expect_s3_class(result, "tbl_lazy")
       expect_true(inherits(dbplyr::remote_con(result), "duckdb_connection"))
       result
     },
-    collect = function(...) {
-      stop("collect should not be called")
-    },
-    .package = "dplyr"
+    .package = "easyNRD"
   )
 
-  expect_equal(compute_calls, 1L)
+  expect_equal(compute_calls, 3L)
   expect_s3_class(out, "tbl_lazy")
   expect_true(inherits(dbplyr::remote_con(out), "duckdb_connection"))
 })
