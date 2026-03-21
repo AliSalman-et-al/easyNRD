@@ -35,6 +35,80 @@
   path
 }
 
+# Read one environment variable, distinguishing unset from empty-string values.
+.nrd_env_value <- function(name) {
+  Sys.getenv(name, unset = NA_character_)
+}
+
+# Detect available physical CPU cores for optional DuckDB tuning.
+.nrd_available_physical_cores <- function() {
+  cores <- tryCatch(parallel::detectCores(logical = FALSE), error = function(e) NA_integer_)
+
+  if (!is.numeric(cores) || length(cores) != 1 || is.na(cores) || cores < 1) {
+    return(1L)
+  }
+
+  as.integer(cores)
+}
+
+# Validate and resolve the optional easyNRD DuckDB threads setting.
+.nrd_resolve_max_threads <- function() {
+  env_value <- .nrd_env_value("EASYNRD_MAX_THREADS")
+  if (!is.na(env_value)) {
+    value <- env_value
+    source_name <- "EASYNRD_MAX_THREADS"
+  } else {
+    option_value <- getOption("easynrd.max_threads")
+    if (is.null(option_value)) {
+      return(NULL)
+    }
+    value <- option_value
+    source_name <- "easynrd.max_threads"
+  }
+
+  if (is.character(value)) {
+    if (length(value) != 1 || is.na(value) || !nzchar(value) || !grepl("^[0-9]+$", value)) {
+      rlang::abort(sprintf("`%s` must be a single positive integer.", source_name))
+    }
+    value <- suppressWarnings(as.integer(value))
+  } else if (is.numeric(value)) {
+    if (length(value) != 1 || is.na(value) || value < 1 || value != as.integer(value)) {
+      rlang::abort(sprintf("`%s` must be a single positive integer.", source_name))
+    }
+    value <- as.integer(value)
+  } else {
+    rlang::abort(sprintf("`%s` must be a single positive integer.", source_name))
+  }
+
+  if (is.na(value) || value < 1L) {
+    rlang::abort(sprintf("`%s` must be a single positive integer.", source_name))
+  }
+
+  min(value, .nrd_available_physical_cores())
+}
+
+# Validate and resolve the optional easyNRD DuckDB memory limit setting.
+.nrd_resolve_memory_limit <- function() {
+  env_value <- .nrd_env_value("EASYNRD_MEMORY_LIMIT")
+  if (!is.na(env_value)) {
+    if (!nzchar(env_value)) {
+      rlang::abort("`EASYNRD_MEMORY_LIMIT` must be a single non-empty string.")
+    }
+    return(env_value)
+  }
+
+  option_value <- getOption("easynrd.memory_limit")
+  if (is.null(option_value)) {
+    return(NULL)
+  }
+
+  if (!is.character(option_value) || length(option_value) != 1 || is.na(option_value) || !nzchar(option_value)) {
+    rlang::abort("`easynrd.memory_limit` must be a single non-empty string.")
+  }
+
+  option_value
+}
+
 # Apply the required easyNRD DuckDB settings for a new connection.
 .nrd_configure_connection <- function(con) {
   temp_dir <- .nrd_make_session_temp_dir()
@@ -42,6 +116,17 @@
 
   DBI::dbExecute(con, paste0("SET temp_directory = ", temp_dir_sql))
   DBI::dbExecute(con, "SET preserve_insertion_order = false")
+
+  max_threads <- .nrd_resolve_max_threads()
+  if (!is.null(max_threads)) {
+    DBI::dbExecute(con, paste0("SET threads = ", max_threads))
+  }
+
+  memory_limit <- .nrd_resolve_memory_limit()
+  if (!is.null(memory_limit)) {
+    memory_limit_sql <- as.character(DBI::dbQuoteString(con, memory_limit))
+    DBI::dbExecute(con, paste0("SET memory_limit = ", memory_limit_sql))
+  }
 
   temp_dir
 }

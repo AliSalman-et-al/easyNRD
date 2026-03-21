@@ -21,6 +21,7 @@ Imports:
     dbplyr (>= 2.4.0),
     dplyr,
     duckdb,
+    parallel,
     rlang,
     srvyr,
     tidyselect

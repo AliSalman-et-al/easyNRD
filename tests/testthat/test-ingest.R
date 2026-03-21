@@ -1,3 +1,10 @@
+current_setting_value <- function(con, setting) {
+  DBI::dbGetQuery(
+    con,
+    sprintf("SELECT current_setting('%s') AS value", setting)
+  )$value[[1]]
+}
+
 test_that("single parquet path ingests to a DuckDB-backed lazy table", {
   path <- make_synthetic_nrd()
   on.exit(unlink(path), add = TRUE)
@@ -175,4 +182,189 @@ test_that("ingest result is never an in-memory object", {
 
   expect_false(inherits(data, c("tbl_df", "data.frame")))
   expect_true(inherits(dbplyr::remote_con(data), "duckdb_connection"))
+})
+
+test_that("EASYNRD_MAX_THREADS env var is applied to new ingest connections", {
+  old_env <- Sys.getenv("EASYNRD_MAX_THREADS", unset = NA_character_)
+  Sys.setenv(EASYNRD_MAX_THREADS = "2")
+  on.exit(
+    {
+      if (is.na(old_env)) Sys.unsetenv("EASYNRD_MAX_THREADS") else Sys.setenv(EASYNRD_MAX_THREADS = old_env)
+    },
+    add = TRUE
+  )
+
+  path <- make_synthetic_nrd()
+  on.exit(unlink(path), add = TRUE)
+
+  data <- testthat::with_mocked_bindings(
+    nrd_ingest(path),
+    .nrd_available_physical_cores = function() 8L,
+    .package = "easyNRD"
+  )
+  on.exit(nrd_close(data), add = TRUE)
+
+  expect_identical(as.integer(current_setting_value(dbplyr::remote_con(data), "threads")), 2L)
+})
+
+test_that("easynrd.max_threads option is applied when env var is unset", {
+  old_env <- Sys.getenv("EASYNRD_MAX_THREADS", unset = NA_character_)
+  Sys.unsetenv("EASYNRD_MAX_THREADS")
+  old_option <- getOption("easynrd.max_threads")
+  options(easynrd.max_threads = 3L)
+  on.exit(
+    {
+      if (is.na(old_env)) Sys.unsetenv("EASYNRD_MAX_THREADS") else Sys.setenv(EASYNRD_MAX_THREADS = old_env)
+      options(easynrd.max_threads = old_option)
+    },
+    add = TRUE
+  )
+
+  path <- make_synthetic_nrd()
+  on.exit(unlink(path), add = TRUE)
+
+  data <- testthat::with_mocked_bindings(
+    nrd_ingest(path),
+    .nrd_available_physical_cores = function() 8L,
+    .package = "easyNRD"
+  )
+  on.exit(nrd_close(data), add = TRUE)
+
+  expect_identical(as.integer(current_setting_value(dbplyr::remote_con(data), "threads")), 3L)
+})
+
+test_that("EASYNRD_MAX_THREADS takes precedence over the option", {
+  old_env <- Sys.getenv("EASYNRD_MAX_THREADS", unset = NA_character_)
+  Sys.setenv(EASYNRD_MAX_THREADS = "2")
+  old_option <- getOption("easynrd.max_threads")
+  options(easynrd.max_threads = 5L)
+  on.exit(
+    {
+      if (is.na(old_env)) Sys.unsetenv("EASYNRD_MAX_THREADS") else Sys.setenv(EASYNRD_MAX_THREADS = old_env)
+      options(easynrd.max_threads = old_option)
+    },
+    add = TRUE
+  )
+
+  path <- make_synthetic_nrd()
+  on.exit(unlink(path), add = TRUE)
+
+  data <- testthat::with_mocked_bindings(
+    nrd_ingest(path),
+    .nrd_available_physical_cores = function() 8L,
+    .package = "easyNRD"
+  )
+  on.exit(nrd_close(data), add = TRUE)
+
+  expect_identical(as.integer(current_setting_value(dbplyr::remote_con(data), "threads")), 2L)
+})
+
+test_that("thread settings are silently capped to physical cores", {
+  old_env <- Sys.getenv("EASYNRD_MAX_THREADS", unset = NA_character_)
+  Sys.setenv(EASYNRD_MAX_THREADS = "99")
+  on.exit(
+    {
+      if (is.na(old_env)) Sys.unsetenv("EASYNRD_MAX_THREADS") else Sys.setenv(EASYNRD_MAX_THREADS = old_env)
+    },
+    add = TRUE
+  )
+
+  path <- make_synthetic_nrd()
+  on.exit(unlink(path), add = TRUE)
+
+  data <- testthat::with_mocked_bindings(
+    nrd_ingest(path),
+    .nrd_available_physical_cores = function() 4L,
+    .package = "easyNRD"
+  )
+  on.exit(nrd_close(data), add = TRUE)
+
+  expect_identical(as.integer(current_setting_value(dbplyr::remote_con(data), "threads")), 4L)
+})
+
+test_that("invalid EASYNRD_MAX_THREADS values abort with source-specific messages", {
+  old_env <- Sys.getenv("EASYNRD_MAX_THREADS", unset = NA_character_)
+  on.exit(
+    {
+      if (is.na(old_env)) Sys.unsetenv("EASYNRD_MAX_THREADS") else Sys.setenv(EASYNRD_MAX_THREADS = old_env)
+    },
+    add = TRUE
+  )
+
+  for (value in c("abc", "0", "-1")) {
+    Sys.setenv(EASYNRD_MAX_THREADS = value)
+    expect_error(.nrd_resolve_max_threads(), "EASYNRD_MAX_THREADS")
+  }
+})
+
+test_that("EASYNRD_MEMORY_LIMIT env var is applied to new ingest connections", {
+  old_env <- Sys.getenv("EASYNRD_MEMORY_LIMIT", unset = NA_character_)
+  Sys.setenv(EASYNRD_MEMORY_LIMIT = "512MB")
+  on.exit(
+    {
+      if (is.na(old_env)) Sys.unsetenv("EASYNRD_MEMORY_LIMIT") else Sys.setenv(EASYNRD_MEMORY_LIMIT = old_env)
+    },
+    add = TRUE
+  )
+
+  path <- make_synthetic_nrd()
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  expected <- NULL
+  with_duckdb_connection(function(con) {
+    DBI::dbExecute(con, "SET memory_limit = '512MB'")
+    expected <<- as.character(current_setting_value(con, "memory_limit"))
+  })
+
+  expect_identical(as.character(current_setting_value(dbplyr::remote_con(data), "memory_limit")), expected)
+})
+
+test_that("empty EASYNRD_MEMORY_LIMIT aborts with a source-specific message", {
+  expect_error(
+    testthat::with_mocked_bindings(
+      .nrd_resolve_memory_limit(),
+      .nrd_env_value = function(name) if (identical(name, "EASYNRD_MEMORY_LIMIT")) "" else NA_character_,
+      .package = "easyNRD"
+    ),
+    "EASYNRD_MEMORY_LIMIT"
+  )
+})
+
+test_that("when neither threads nor memory limit is configured defaults are preserved", {
+  old_threads_env <- Sys.getenv("EASYNRD_MAX_THREADS", unset = NA_character_)
+  old_memory_env <- Sys.getenv("EASYNRD_MEMORY_LIMIT", unset = NA_character_)
+  old_threads_opt <- getOption("easynrd.max_threads")
+  old_memory_opt <- getOption("easynrd.memory_limit")
+  Sys.unsetenv("EASYNRD_MAX_THREADS")
+  Sys.unsetenv("EASYNRD_MEMORY_LIMIT")
+  options(easynrd.max_threads = NULL, easynrd.memory_limit = NULL)
+  on.exit(
+    {
+      if (is.na(old_threads_env)) Sys.unsetenv("EASYNRD_MAX_THREADS") else Sys.setenv(EASYNRD_MAX_THREADS = old_threads_env)
+      if (is.na(old_memory_env)) Sys.unsetenv("EASYNRD_MEMORY_LIMIT") else Sys.setenv(EASYNRD_MEMORY_LIMIT = old_memory_env)
+      options(easynrd.max_threads = old_threads_opt, easynrd.memory_limit = old_memory_opt)
+    },
+    add = TRUE
+  )
+
+  expected <- new.env(parent = emptyenv())
+  with_duckdb_connection(function(con) {
+    expected$threads <- current_setting_value(con, "threads")
+    expected$memory_limit <- current_setting_value(con, "memory_limit")
+  })
+
+  with_duckdb_connection(function(con) {
+    testthat::with_mocked_bindings(
+      .nrd_configure_connection(con),
+      .nrd_resolve_max_threads = function() NULL,
+      .nrd_resolve_memory_limit = function() NULL,
+      .package = "easyNRD"
+    )
+
+    expect_identical(as.character(current_setting_value(con, "threads")), as.character(expected$threads))
+    expect_identical(as.character(current_setting_value(con, "memory_limit")), as.character(expected$memory_limit))
+  })
 })

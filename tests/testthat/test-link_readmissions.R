@@ -409,6 +409,91 @@ test_that("requested readmit_vars are retained through the narrowed checkpoint",
   expect_identical(out$readmit_severity[[1]], "first")
 })
 
+test_that("EASYNRD_VERBOSE=1 emits checkpoint messages during linkage", {
+  old_verbose <- Sys.getenv("EASYNRD_VERBOSE", unset = NA_character_)
+  Sys.setenv(EASYNRD_VERBOSE = "1")
+  on.exit(
+    {
+      if (is.na(old_verbose)) Sys.unsetenv("EASYNRD_VERBOSE") else Sys.setenv(EASYNRD_VERBOSE = old_verbose)
+    },
+    add = TRUE
+  )
+
+  dat <- dplyr::tibble(
+    YEAR = c(2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001"),
+    KEY_NRD = c(101L, 102L),
+    NRD_DaysToEvent = c(10L, 18L),
+    LOS = c(2L, 1L),
+    DMONTH = c(1L, 1L),
+    DIED = c(0L, 0L),
+    is_index = c(1L, 1L),
+    is_readmit = c(1L, 1L)
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  messages <- testthat::capture_messages({
+    nrd_link_readmissions(
+      data,
+      index_condition = is_index == 1L,
+      readmit_condition = is_readmit == 1L,
+      window = 30L
+    ) |>
+      dplyr::summarise(n = dplyr::n()) |>
+      dplyr::collect()
+  })
+
+  expect_length(messages, 3L)
+  expect_true(any(grepl("link_base", messages, fixed = TRUE)))
+  expect_true(any(grepl("first_readmission_gap", messages, fixed = TRUE)))
+  expect_true(any(grepl("first_readmission_day", messages, fixed = TRUE)))
+})
+
+test_that("linkage is silent when EASYNRD_VERBOSE is unset", {
+  old_verbose <- Sys.getenv("EASYNRD_VERBOSE", unset = NA_character_)
+  Sys.unsetenv("EASYNRD_VERBOSE")
+  on.exit(
+    {
+      if (is.na(old_verbose)) Sys.unsetenv("EASYNRD_VERBOSE") else Sys.setenv(EASYNRD_VERBOSE = old_verbose)
+    },
+    add = TRUE
+  )
+
+  dat <- dplyr::tibble(
+    YEAR = c(2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001"),
+    KEY_NRD = c(101L, 102L),
+    NRD_DaysToEvent = c(10L, 18L),
+    LOS = c(2L, 1L),
+    DMONTH = c(1L, 1L),
+    DIED = c(0L, 0L),
+    is_index = c(1L, 1L),
+    is_readmit = c(1L, 1L)
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  messages <- testthat::capture_messages({
+    nrd_link_readmissions(
+      data,
+      index_condition = is_index == 1L,
+      readmit_condition = is_readmit == 1L,
+      window = 30L
+    ) |>
+      dplyr::summarise(n = dplyr::n()) |>
+      dplyr::collect()
+  })
+
+  expect_length(messages, 0L)
+})
+
 test_that("nrd_link_readmissions stays lazy and uses a DuckDB compute checkpoint", {
   dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L),
