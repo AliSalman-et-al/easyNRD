@@ -5,5 +5,14 @@
 .httr-oauth
 .DS_Store
 .quarto
+
+# R CMD check artifacts
+*.Rcheck/
+*.tar.gz
+
+# Benchmark artifacts
 data-raw/benchmarks/artifacts/
 data-raw/benchmarks/*.parquet
+
+# testthat snapshot review files
+tests/testthat/_snaps/*.new.md

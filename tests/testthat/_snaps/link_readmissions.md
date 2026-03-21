@@ -30,8 +30,32 @@
       ELSE NULL
       END AS outcome_status
       FROM (
-        SELECT checkpoint_tbl.*, gap, readmit_KEY_NRD, readmit_severity
-        FROM checkpoint_tbl
+        SELECT LHS.*, gap, readmit_KEY_NRD, readmit_severity
+        FROM (
+          SELECT
+            q01.*,
+            COALESCE(is_index = 1, FALSE) AND is_index_eligible AND DIED = 1 AS ".nrd_died_at_index",
+            CASE WHEN (is_index_eligible AND DIED = 0 AND COALESCE(is_index = 1, FALSE)) THEN 1 ELSE 0 END AS IndexEvent,
+            NRD_DAYSTOEVENT + LOS AS ".nrd_censor_day",
+            COALESCE(is_readmit = 1, FALSE) AS ".nrd_readmit_eligible"
+          FROM (
+            SELECT q01.*, DMONTH <= 11.0 AS is_index_eligible
+            FROM (
+              SELECT
+                "YEAR",
+                NRD_VISITLINK,
+                KEY_NRD,
+                NRD_DaysToEvent AS NRD_DAYSTOEVENT,
+                LOS,
+                DMONTH,
+                DIED,
+                is_index,
+                is_readmit,
+                severity
+              FROM arrow_tbl
+            ) q01
+          ) q01
+        ) LHS
         LEFT JOIN (
           SELECT
             "YEAR",
@@ -93,7 +117,7 @@
                         KEY_NRD,
                         severity
                       FROM checkpoint_tbl
-                      WHERE (is_readmit = 1)
+                      WHERE (".nrd_readmit_eligible")
                     ) RHS
                       ON (
                         LHS."YEAR" = RHS."YEAR" AND
@@ -111,9 +135,8 @@
           WHERE (col03 <= 1)
         ) RHS
           ON (
-            checkpoint_tbl."YEAR" = RHS."YEAR" AND
-            checkpoint_tbl.NRD_VISITLINK = RHS.NRD_VISITLINK AND
-            checkpoint_tbl.KEY_NRD = RHS.KEY_NRD_idx
+            LHS."YEAR" = RHS."YEAR" AND
+            LHS.NRD_VISITLINK = RHS.NRD_VISITLINK AND
+            LHS.KEY_NRD = RHS.KEY_NRD_idx
           )
       ) q01
-

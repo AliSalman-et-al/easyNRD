@@ -17,7 +17,7 @@
 }
 
 # Materialize the annotated base table before the self-join.
-.nrd_checkpoint_link_base <- function(data, index_condition, window) {
+.nrd_annotate_link_base <- function(data, index_condition, readmit_condition, window) {
   censor_limit <- 12L - ceiling(window / 30L)
   discharge_day <- .nrd_discharge_day_expr(data)
 
@@ -31,7 +31,25 @@
         0L,
         missing = 0L
       ),
-      .nrd_censor_day = !!discharge_day
+      .nrd_censor_day = !!discharge_day,
+      .nrd_readmit_eligible = dplyr::coalesce(!!readmit_condition, FALSE)
+    )
+}
+
+# Materialize only linkage-critical columns before the self-join.
+.nrd_checkpoint_link_base <- function(data, readmit_vars) {
+  data |>
+    dplyr::select(
+      YEAR,
+      NRD_VISITLINK,
+      KEY_NRD,
+      NRD_DAYSTOEVENT,
+      LOS,
+      IndexEvent,
+      .nrd_died_at_index,
+      .nrd_censor_day,
+      .nrd_readmit_eligible,
+      dplyr::any_of(readmit_vars)
     ) |>
     dplyr::compute()
 }
@@ -55,9 +73,9 @@
 }
 
 # Create the candidate pool with only the columns needed after filtering.
-.nrd_candidate_pool <- function(data, readmit_condition, readmit_vars) {
+.nrd_candidate_pool <- function(data, readmit_vars) {
   data |>
-    dplyr::filter(!!readmit_condition) |>
+    dplyr::filter(.nrd_readmit_eligible) |>
     dplyr::transmute(
       YEAR,
       NRD_VISITLINK,
@@ -121,7 +139,7 @@
         TRUE ~ NA_character_
       )
     ) |>
-    dplyr::select(-is_index_eligible, -.nrd_died_at_index, -.nrd_censor_day, -gap)
+    dplyr::select(-is_index_eligible, -.nrd_died_at_index, -.nrd_censor_day, -.nrd_readmit_eligible, -gap)
 }
 
 #' Link first qualifying readmissions back to eligible index discharges
@@ -165,14 +183,20 @@ nrd_link_readmissions <- function(
   window <- .nrd_validate_window(window)
   index_condition <- rlang::enquo(index_condition)
   readmit_condition <- rlang::enquo(readmit_condition)
+  readmit_vars <- .nrd_resolve_readmit_vars(data, {{ readmit_vars }})
 
-  # Step 1-3: annotate index eligibility and checkpoint the base table.
-  base <- .nrd_checkpoint_link_base(data, index_condition = index_condition, window = window)
+  # Step 1-2: annotate the full denominator-preserving base table.
+  base <- .nrd_annotate_link_base(
+    data,
+    index_condition = index_condition,
+    readmit_condition = readmit_condition,
+    window = window
+  )
 
-  # Step 4-5: build the index and candidate pools with early projection.
-  readmit_vars <- .nrd_resolve_readmit_vars(base, {{ readmit_vars }})
-  index_pool <- .nrd_index_pool(base)
-  candidate_pool <- .nrd_candidate_pool(base, readmit_condition = readmit_condition, readmit_vars = readmit_vars)
+  # Step 3-5: checkpoint only linkage-critical columns for the self-join work.
+  link_base <- .nrd_checkpoint_link_base(base, readmit_vars = readmit_vars)
+  index_pool <- .nrd_index_pool(link_base)
+  candidate_pool <- .nrd_candidate_pool(link_base, readmit_vars = readmit_vars)
 
   # Step 6-7: self-join within patient-year scope and keep the first readmission.
   first_map <- .nrd_first_readmission(index_pool, candidate_pool, window = window) |>

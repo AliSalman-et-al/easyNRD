@@ -303,6 +303,112 @@ test_that("readmissions can become later index events", {
   expect_identical(out$outcome_status[[2]], "Readmitted")
 })
 
+test_that("final linkage preserves original columns after narrowing the checkpoint", {
+  dat <- dplyr::tibble(
+    YEAR = c(2019L, 2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001", "B001"),
+    KEY_NRD = c(101L, 102L, 201L),
+    NRD_DaysToEvent = c(10L, 18L, 40L),
+    LOS = c(2L, 1L, 2L),
+    DMONTH = c(1L, 1L, 2L),
+    DIED = c(0L, 0L, 0L),
+    is_index = c(1L, 1L, 1L),
+    trigger_readmit = c(0L, 1L, 0L),
+    severity = c("index", "readmit", "other"),
+    retained_marker = c("keep_a", "keep_b", "keep_c")
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = trigger_readmit == 1L,
+    window = 30L,
+    readmit_vars = KEY_NRD
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
+
+  expect_equal(nrow(out), nrow(dat))
+  expect_true(all(c("severity", "retained_marker", "trigger_readmit") %in% names(out)))
+  expect_false(".nrd_readmit_eligible" %in% names(out))
+  expect_identical(out$retained_marker, dat$retained_marker)
+  expect_identical(out$severity, dat$severity)
+  expect_identical(out$trigger_readmit, dat$trigger_readmit)
+})
+
+test_that("readmit_condition is resolved before the narrowed checkpoint", {
+  dat <- dplyr::tibble(
+    YEAR = c(2019L, 2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001", "B001"),
+    KEY_NRD = c(101L, 102L, 201L),
+    NRD_DaysToEvent = c(10L, 18L, 40L),
+    LOS = c(2L, 1L, 2L),
+    DMONTH = c(1L, 1L, 2L),
+    DIED = c(0L, 0L, 0L),
+    is_index = c(1L, 1L, 1L),
+    trigger_readmit = c(0L, 1L, 0L),
+    severity = c("index", "readmit", "other")
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = trigger_readmit == 1L,
+    window = 30L,
+    readmit_vars = KEY_NRD
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
+
+  expect_identical(out$readmit_KEY_NRD[[1]], 102L)
+  expect_true(is.na(out$readmit_KEY_NRD[[2]]))
+})
+
+test_that("requested readmit_vars are retained through the narrowed checkpoint", {
+  dat <- dplyr::tibble(
+    YEAR = c(2019L, 2019L, 2019L),
+    NRD_VISITLINK = c("A001", "A001", "A001"),
+    KEY_NRD = c(101L, 102L, 103L),
+    NRD_DaysToEvent = c(10L, 18L, 30L),
+    LOS = c(2L, 1L, 1L),
+    DMONTH = c(1L, 1L, 2L),
+    DIED = c(0L, 0L, 0L),
+    is_index = c(1L, 1L, 1L),
+    trigger_readmit = c(0L, 1L, 1L),
+    severity = c("index", "first", "later"),
+    retained_marker = c("keep_a", "keep_b", "keep_c")
+  )
+  path <- make_synthetic_nrd(dat)
+  on.exit(unlink(path), add = TRUE)
+
+  data <- nrd_ingest(path)
+  on.exit(nrd_close(data), add = TRUE)
+
+  out <- nrd_link_readmissions(
+    data,
+    index_condition = is_index == 1L,
+    readmit_condition = trigger_readmit == 1L,
+    window = 30L,
+    readmit_vars = c(KEY_NRD, severity)
+  ) |>
+    dplyr::arrange(KEY_NRD) |>
+    dplyr::collect()
+
+  expect_true(all(c("readmit_KEY_NRD", "readmit_severity") %in% names(out)))
+  expect_identical(out$readmit_KEY_NRD[[1]], 102L)
+  expect_identical(out$readmit_severity[[1]], "first")
+})
+
 test_that("nrd_link_readmissions stays lazy and uses a DuckDB compute checkpoint", {
   dat <- dplyr::tibble(
     YEAR = c(2019L, 2019L),
