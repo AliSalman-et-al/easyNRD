@@ -23,6 +23,16 @@ behaviors are protected by tests. It is a specification, not a tutorial.
 The package exists to support correct, readable, DuckDB-backed analysis of the
 AHRQ Nationwide Readmissions Database (NRD) for clinical research.
 
+The package supports NRD data years 2016 and later only.
+
+- 2016 is the first NRD year with a full calendar year of ICD-10-CM/PCS data.
+- The `I10_DX*` and `I10_PR*` column naming convention used throughout
+  `easyNRD` starts with that ICD-10 transition.
+- The 2015 NRD is a split file with nine months of ICD-9-CM and three months
+  of ICD-10-CM/PCS and uses a different file structure.
+- Data prior to 2016 uses ICD-9-CM and a different column naming scheme
+  entirely.
+
 # Governing Principles
 
 The rewrite follows these priorities, in order:
@@ -53,6 +63,7 @@ The implementation must respect the following NRD identifier rules:
 - `NRD_VISITLINK` links discharges for a patient within the delivered linkage
   scope.
 - `HOSP_NRD` identifies hospitals within a year.
+- `NRD_STRATUM` identifies survey strata within a year.
 - `YEAR` must scope every linkage operation.
 
 Implications:
@@ -60,7 +71,30 @@ Implications:
 - `KEY_NRD` is never a patient identifier.
 - `NRD_VISITLINK` cannot be used across years.
 - `HOSP_NRD` cannot be used to track hospitals across years.
+- `NRD_STRATUM` cannot be pooled as if strata labels were comparable across
+  years.
 - Any patient-level join that ignores `YEAR` is incorrect.
+
+# Multi-year Pooling Contract
+
+Multi-year NRD pooling is common, but the package must enforce the correct
+methodology.
+
+- `NRD_VISITLINK`, `HOSP_NRD`, and `NRD_STRATUM` are all year-specific.
+- Readmission linkage must always run within one year.
+- Survey design is valid only within one year.
+- The package makes no attempt to deduplicate or re-key `KEY_NRD` in pooled
+  outputs.
+- `YEAR` is always required to disambiguate records in a pooled table.
+
+The only supported pooling strategy is:
+
+1. ingest one year at a time
+2. run the full single-year pipeline within that year
+3. export the yearly result
+4. union the per-year rows after yearly processing is complete
+
+Pooling is never a join of raw multi-year NRD data.
 
 # Time Semantics
 
@@ -102,6 +136,7 @@ The alpha version exports exactly these functions and nothing else:
 
 ```r
 nrd_ingest(paths)
+nrd_pipeline(paths, .f, output_dir = NULL)
 nrd_prepare(data)
 nrd_flag_condition(data, name, pattern = NULL, codes = NULL, type, scope)
 nrd_link_readmissions(data, index_condition, readmit_condition, window = 30L, readmit_vars = NULL)
@@ -174,6 +209,44 @@ Behavioral contract:
   - `NRD_DaysToEvent` -> `NRD_DAYSTOEVENT`
 - Attaches owner metadata so `nrd_close()` can release resources.
 - Returns a DuckDB-backed `tbl_lazy`.
+- Never calls `collect()`.
+
+`nrd_ingest()` accepts one or more parquet files representing compatible NRD
+data years 2016 and later. It does not normalize older ICD-9-era file layouts.
+
+## `nrd_pipeline(paths, .f, output_dir = NULL)`
+
+`nrd_pipeline()` is the required public wrapper for methodology-safe multi-year
+analysis.
+
+Behavioral contract:
+
+- `paths` must be a non-empty named character vector or named list of parquet
+  paths.
+- Names must be non-missing, non-empty, and unique, and are processed in the
+  supplied order.
+- `.f` must be a function.
+- For each named year label, in order:
+  1. call `nrd_ingest()` on that year's parquet path
+  2. call `.f(data)` on the ingested single-year table
+  3. assert that `.f` returned a DuckDB-backed lazy table and did not collect
+  4. export the yearly result to `NRD_<year>_pipeline.parquet`
+  5. close the yearly ingest resources with `nrd_close()`
+  6. emit a message that includes the year label and elapsed time
+- If `.f()` or export fails for a given year, the function aborts with that year
+  label in the error and preserves the original parent error.
+- The implementation never passes raw parquet paths from multiple years into one
+  pre-processing `nrd_ingest()` call.
+- After all yearly exports succeed, the function calls `nrd_ingest()` on the
+  exported yearly parquet files and returns the pooled DuckDB-backed lazy table
+  invisibly.
+- When `output_dir = NULL`, the function uses a temporary intermediate parquet
+  directory, deletes it on error, and registers it for deletion when
+  `nrd_close()` is called on the pooled object.
+- After `nrd_close()` is called on the pooled object, the temporary
+  intermediate parquet files are gone and the table must not be queried again.
+- DuckDB session temp directories remain separate from pipeline intermediate
+  parquet directories and are managed by the existing owner mechanism.
 - Never calls `collect()`.
 
 ## `nrd_prepare(data)`
@@ -369,6 +442,15 @@ srvyr::as_survey(
 ```
 
 - Works on in-memory data frames and lazy DuckDB tables.
+- Valid only for a single NRD year.
+- Must not be called on pooled output from `nrd_pipeline()`.
+
+Correct weighted multi-year workflow:
+
+1. process each year independently
+2. create the survey design within that year with `nrd_as_survey()`
+3. compute year-specific weighted estimates
+4. combine the estimates after the per-year survey analysis step
 
 ## `nrd_label(data, ..., .keep_original = FALSE)`
 
@@ -405,9 +487,12 @@ DBI::dbDisconnect(con, shutdown = TRUE)
 ```
 
 - Removes the associated session temp directory.
+- Removes any registered extra cleanup paths such as temporary intermediate
+  parquet directories created by `nrd_pipeline(output_dir = NULL)`.
 - Marks the owner as closed.
 - Returns `TRUE` invisibly if resources were released.
 - Returns `FALSE` invisibly if the object was already closed or unmanaged.
+- After `nrd_close()` succeeds, the managed table must not be queried again.
 
 The alpha implementation uses a thin owner wrapper only. It does not rely on
 `reg.finalizer()`.
@@ -452,14 +537,21 @@ by tests.
    actual data columns, not to a truncated static code list.
 8. Survey domain correctness: `srvyr::filter()` domain analysis on the survey
    object matches `survey::subset()` on the equivalent in-memory design.
-9. Lazy execution: `nrd_prepare()`, `nrd_flag_condition()`, and `nrd_select()`
-   never call `collect()`.
-10. Readmission checkpointing: `nrd_link_readmissions()` uses multiple
+9. Multi-year orchestration: `nrd_pipeline()` processes one year at a time,
+   exports yearly results, and pools only by re-ingesting the per-year exports.
+10. Pipeline return type: `.f` returning a collected or Arrow-backed object
+    aborts clearly because the pipeline result must stay DuckDB-backed and lazy.
+11. Pipeline cleanup: temporary intermediate parquet files created by
+    `nrd_pipeline(output_dir = NULL)` are deleted on error and by `nrd_close()`
+    on the pooled result.
+12. Lazy execution: `nrd_prepare()`, `nrd_flag_condition()`, and `nrd_select()`
+    never call `collect()`.
+13. Readmission checkpointing: `nrd_link_readmissions()` uses multiple
     deliberate internal `dplyr::compute()` checkpoints but never calls
     `collect()`.
-11. SQL snapshot stability: snapshot tests cover `nrd_flag_condition()` in both
+14. SQL snapshot stability: snapshot tests cover `nrd_flag_condition()` in both
     pattern and codes modes and cover `nrd_link_readmissions()` SQL rendering.
-12. SQL mode isolation: pattern-mode SQL must not contain `IN (...)`, and
+15. SQL mode isolation: pattern-mode SQL must not contain `IN (...)`, and
     codes-mode SQL must not contain regex SQL such as `regexp_matches`.
 
 # Test Fixture Requirements

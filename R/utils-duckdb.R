@@ -136,6 +136,7 @@
   owner <- new.env(parent = emptyenv())
   owner$con <- con
   owner$temp_dir <- temp_dir
+  owner$cleanup_paths <- character(0)
   owner$closed <- FALSE
   owner
 }
@@ -175,6 +176,18 @@
     attr(con, "nrd_owner") <- owner
   }
 
+  data
+}
+
+# Register extra filesystem paths for cleanup when an owner is closed.
+.nrd_add_owner_cleanup_paths <- function(data, paths) {
+  owner <- .nrd_get_owner(data)
+  if (is.null(owner)) {
+    return(data)
+  }
+
+  paths <- unique(paths[!is.na(paths) & nzchar(paths)])
+  owner$cleanup_paths <- unique(c(owner$cleanup_paths, paths))
   data
 }
 

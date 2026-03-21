@@ -4,11 +4,11 @@ Version: 0.0.0.9000
 Authors@R:
     person("Ali", "Salman", email = "alisalman.et.al@gmail.com", role = c("aut", "cre"))
 Description: A tidy, DuckDB-backed toolkit for Healthcare Cost and Utilization
-    Project Nationwide Readmissions Database (HCUP-NRD) data. 'easyNRD'
-    provides a discharge-level workflow to ingest parquet data, prepare NRD
-    timing fields, flag diagnosis and procedure conditions, link first
-    qualifying readmissions, export parquet results, and instantiate survey
-    designs for weighted analysis.
+    Project Nationwide Readmissions Database (HCUP-NRD) data years 2016 and
+    later. 'easyNRD' provides a discharge-level workflow to ingest parquet
+    data, prepare NRD timing fields, flag diagnosis and procedure conditions,
+    link first qualifying readmissions, pool multi-year results safely, export
+    parquet results, and instantiate survey designs for weighted analysis.
 License: file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

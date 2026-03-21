@@ -113,6 +113,7 @@ nrd_close <- function(data) {
 
   con <- owner$con
   temp_dir <- owner$temp_dir
+  cleanup_paths <- owner$cleanup_paths
 
   if (inherits(con, "duckdb_connection") && isTRUE(tryCatch(DBI::dbIsValid(con), error = function(e) FALSE))) {
     DBI::dbDisconnect(con, shutdown = TRUE)
@@ -122,9 +123,18 @@ nrd_close <- function(data) {
     unlink(temp_dir, recursive = TRUE, force = TRUE)
   }
 
+  if (is.character(cleanup_paths) && length(cleanup_paths) > 0) {
+    for (path in cleanup_paths) {
+      if (dir.exists(path) || file.exists(path)) {
+        unlink(path, recursive = TRUE, force = TRUE)
+      }
+    }
+  }
+
   owner$closed <- TRUE
   owner$con <- NULL
   owner$temp_dir <- NULL
+  owner$cleanup_paths <- character(0)
 
   invisible(TRUE)
 }
